@@ -165,9 +165,9 @@ void Visualizer::SpacePressed()
 #	endif // HAVE_FFTW3_H
 }
 
-Color Visualizer::toColor( int number )
+Color Visualizer::toColor( int number, int max )
 {
-    const int normalizedNumber = number % 7;
+    const int normalizedNumber = ( ( number * 7 ) / max ) % 7;
     switch ( normalizedNumber ) {
         case 0:
             return clWhite;
@@ -219,7 +219,7 @@ void Visualizer::DrawSoundWave(int16_t *buf, ssize_t samples, size_t y_offset, s
 
             if ( x > 0 && x < w->GetHeight() && (i-(k < half_height + point_pos)) > 0 && (i-(k < half_height + point_pos)) < w->GetWidth() )
             {
-                *w << toColor( ( k * 7 ) / half_height );
+                *w << toColor( k, half_height );
                 *w << XY(i-(k < half_height + point_pos), x) << Config.visualizer_chars[0];
             }
         }
@@ -255,11 +255,11 @@ void Visualizer::DrawFrequencySpectrum(int16_t *buf, ssize_t samples, size_t y_o
 		bar_height = std::min(bar_height/freqs_per_col, height);
 		const size_t start_y = y_offset > 0 ? y_offset : height-bar_height;
 		const size_t stop_y = std::min(bar_height+start_y, w->GetHeight());
-        const Color colorHeight = toColor( ( ( i * 7 ) / win_width ) ) ;
+        const Color colorHeight = toColor( i, win_width );
 
 		for (size_t j = start_y; j < stop_y; j += 1)
         {
-            *w << toColor( colorHeight );
+            *w << colorHeight;
 			*w << XY(i, j) << Config.visualizer_chars[1];
         }
 	}

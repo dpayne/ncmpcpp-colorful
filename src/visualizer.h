@@ -67,7 +67,7 @@ class Visualizer : public Screen<Window>
 		virtual bool isLockable() { return true; }
 
 	private:
-		Color toColor( int number );
+		Color toColor( int number, int max );
 		void DrawSoundWave(int16_t *, ssize_t, size_t, size_t);
 #		ifdef HAVE_FFTW3_H
 		void DrawFrequencySpectrum(int16_t *, ssize_t, size_t, size_t);
