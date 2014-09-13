@@ -203,10 +203,6 @@ void Visualizer::DrawSoundWave(int16_t *buf, ssize_t samples, size_t y_offset, s
 		point_pos /= samples_per_col;
 		point_pos /= std::numeric_limits<int16_t>::max();
 		point_pos *= half_height;
-        // if gap is too big. intermediate values are needed
-        // since without them all we see are blinking points
-        const int breakpoint = std::max(prev_point_pos, point_pos);
-        const int half = (prev_point_pos+point_pos)/2;
         int x = 0;
         for (int k = 0; k < point_pos; k += 2)
         {

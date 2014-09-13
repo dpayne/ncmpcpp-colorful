@@ -39,42 +39,43 @@ class Visualizer : public Screen<Window>
 	public:
 		virtual void SwitchTo();
 		virtual void Resize();
-		
+
 		virtual std::basic_string<my_char_t> Title();
-		
+
 		virtual void Update();
 		virtual void Scroll(Where, const int *) { }
-		
+
 		virtual void EnterPressed() { }
 		virtual void SpacePressed();
 		virtual void MouseButtonPressed(MEVENT) { }
 		virtual bool isTabbable() { return true; }
-		
+
 		virtual NCurses::List *GetList() { return 0; }
-		
+
 		virtual bool allowsSelection() { return false; }
-		
+
 		virtual bool isMergable() { return true; }
-		
+
 		void SetFD();
 		void ResetFD();
 		void FindOutputID();
-		
+
 		static const int WindowTimeout;
-		
+
 	protected:
 		virtual void Init();
 		virtual bool isLockable() { return true; }
-		
+
 	private:
+		Color toColor( int number );
 		void DrawSoundWave(int16_t *, ssize_t, size_t, size_t);
 #		ifdef HAVE_FFTW3_H
 		void DrawFrequencySpectrum(int16_t *, ssize_t, size_t, size_t);
 #		endif // HAVE_FFTW3_H
-		
+
 		int itsOutputID;
 		timeval itsTimer;
-		
+
 		int itsFifo;
 		unsigned itsSamples;
 #		ifdef HAVE_FFTW3_H
