@@ -205,7 +205,7 @@ void Visualizer::DrawSoundWave(int16_t *buf, ssize_t samples, size_t y_offset, s
 		point_pos /= samples_per_col;
 		point_pos /= std::numeric_limits<int16_t>::max();
 		point_pos *= half_height;
-        for (int k = 0; k < point_pos; k += 2)
+        for (int k = 0; k < point_pos * 2; k += 2)
         {
             x = height;
             if ( left )
@@ -219,7 +219,7 @@ void Visualizer::DrawSoundWave(int16_t *buf, ssize_t samples, size_t y_offset, s
 
             if ( x > 0 && x < w->GetHeight() && (i-(k < half_height + point_pos)) > 0 && (i-(k < half_height + point_pos)) < w->GetWidth() )
             {
-                *w << toColor( k, half_height );
+                *w << toColor( k, height );
                 *w << XY(i-(k < half_height + point_pos), x) << Config.visualizer_chars[0];
             }
         }
