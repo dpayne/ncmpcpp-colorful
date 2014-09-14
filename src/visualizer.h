@@ -73,7 +73,8 @@ class Visualizer : public Screen<Window>
 		Color toColor( int number, int max );
 		char toAsciiGrey( int number, int max );
 		void DrawSoundWave(int16_t *, ssize_t, size_t, size_t, bool);
-		void DrawSoundWaveAscii(int16_t *, ssize_t, size_t, size_t, bool);
+		void DrawSoundWaveFill(int16_t *, ssize_t, size_t, size_t, bool);
+		void DrawSoundWaveFillAscii(int16_t *, ssize_t, size_t, size_t, bool);
 #		ifdef HAVE_FFTW3_H
 		void DrawFrequencySpectrum(int16_t *, ssize_t, size_t, size_t, bool);
 #		endif // HAVE_FFTW3_H

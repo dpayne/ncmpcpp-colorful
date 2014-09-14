@@ -135,23 +135,23 @@ void Visualizer::Update()
 #	else
 	if ( Config.visualizer_function == 1 )
 	{
-		draw = &Visualizer::DrawFrequencySpectrum;
+		draw = &Visualizer::DrawSoundWaveFillAscii;
 		color = false;
 	}
 	else if ( Config.visualizer_function == 2 )
 	{
-		draw = &Visualizer::DrawSoundWaveAscii;
-		color = false;
+		draw = &Visualizer::DrawSoundWaveFill;
+		color = true;
 	}
 	else if ( Config.visualizer_function == 3 )
 	{
-		draw = &Visualizer::DrawSoundWave;
+		draw = &Visualizer::DrawSoundWaveFillAscii;
 		color = true;
 	}
 	else if ( Config.visualizer_function == 4 )
 	{
-		draw = &Visualizer::DrawSoundWaveAscii;
-		color = true;
+		draw = &Visualizer::DrawFrequencySpectrum;
+		color = false;
 	}
 	else if ( Config.visualizer_function == 5 )
 	{
@@ -187,7 +187,7 @@ void Visualizer::Update()
 void Visualizer::SpacePressed()
 {
 #	ifdef HAVE_FFTW3_H
-	Config.visualizer_function = ( Config.visualizer_function + 1 ) % 5;
+	Config.visualizer_function = ( Config.visualizer_function + 1 ) % 6;
 	ShowMessage("Visualization type: %s", Config.visualizer_function ? "Sound wave" : "Frequency spectrum");
 #	endif // HAVE_FFTW3_H
 }
@@ -205,6 +205,35 @@ char Visualizer::toAsciiGrey( int number, int max )
 }
 
 void Visualizer::DrawSoundWave(int16_t *buf, ssize_t samples, size_t y_offset, size_t height, bool color)
+{
+	const int samples_per_col = samples/w->GetWidth();
+	const int half_height = height/2;
+	double prev_point_pos = 0;
+	const size_t win_width = w->GetWidth();
+	for (size_t i = 0; i < win_width; ++i)
+	{
+		double point_pos = 0;
+		for (int j = 0; j < samples_per_col; ++j)
+			point_pos += buf[i*samples_per_col+j];
+		point_pos /= samples_per_col;
+		point_pos /= std::numeric_limits<int16_t>::max();
+		point_pos *= half_height;
+		*w << XY(i, y_offset+half_height+point_pos) << Config.visualizer_chars[0];
+		if (i && abs(prev_point_pos-point_pos) > 2)
+		{
+			// if gap is too big. intermediate values are needed
+			// since without them all we see are blinking points
+			const int breakpoint = std::max(prev_point_pos, point_pos);
+			const int half = (prev_point_pos+point_pos)/2;
+			*w << clDefault;
+			for (int k = std::min(prev_point_pos, point_pos)+1; k < breakpoint; k += 2)
+				*w << XY(i-(k < half), y_offset+half_height+k) << Config.visualizer_chars[0];
+		}
+		prev_point_pos = point_pos;
+	}
+}
+
+void Visualizer::DrawSoundWaveFill(int16_t *buf, ssize_t samples, size_t y_offset, size_t height, bool color)
 {
 	const int samples_per_col = samples/w->GetWidth();
 	const int half_height = height/2;
@@ -249,7 +278,7 @@ void Visualizer::DrawSoundWave(int16_t *buf, ssize_t samples, size_t y_offset, s
 	}
 }
 
-void Visualizer::DrawSoundWaveAscii(int16_t *buf, ssize_t samples, size_t y_offset, size_t height, bool color)
+void Visualizer::DrawSoundWaveFillAscii(int16_t *buf, ssize_t samples, size_t y_offset, size_t height, bool color)
 {
 	const int samples_per_col = samples/w->GetWidth();
 	const int half_height = height/2;

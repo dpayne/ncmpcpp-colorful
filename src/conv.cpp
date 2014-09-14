@@ -75,13 +75,13 @@ char IntoVisualizerDraw(const std::string &str)
 {
 	if ( str == "wave" )
 		return 0;
-	else if ( str == "spectrum" )
-		return 1;
 	else if ( str == "wave_ascii" )
-		return 2;
+		return 1;
 	else if ( str == "wave_color" )
-		return 3;
+		return 2;
 	else if ( str == "wave_ascii_color" )
+		return 3;
+	else if ( str == "spectrum" )
 		return 4;
 	else if ( str == "spectrum_color" )
 		return 5;
