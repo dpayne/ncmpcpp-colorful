@@ -31,4 +31,4 @@ audio_output {
 
 #### ScreenShots
 
-![](https://github.com/dpayne/ncmpcpp-colorful/imgs/waveform_color.png)
+![Wave Form](https://github.com/dpayne/ncmpcpp-colorful/imgs/waveform_color.png)
