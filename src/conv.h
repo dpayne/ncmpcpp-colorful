@@ -49,6 +49,7 @@ std::string IntoStr(mpd_tag_type);
 std::string IntoStr(NCurses::Color);
 
 NCurses::Color IntoColor(const std::string &);
+char IntoVisualizerDraw(const std::string &);
 
 mpd_tag_type IntoTagItem(char);
 
@@ -70,3 +71,4 @@ void Trim(std::string &s);
 
 #endif
 
+/* vim: set tabstop=4 softtabstop=4 shiftwidth=4 noexpandtab : */

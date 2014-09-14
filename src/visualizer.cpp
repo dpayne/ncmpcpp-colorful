@@ -41,7 +41,6 @@ Visualizer *myVisualizer = new Visualizer;
 const Color colorMap [] = { clWhite, clCyan, clBlue, clGreen, clYellow, clMagenta, clRed };
 const char asciiGreyScaleMap [] = { '@', '%', '#', '*', '+', '=', '-' };
 
-
 const int Visualizer::WindowTimeout = 1000/25; /* 25 fps */
 
 void Visualizer::Init()
@@ -128,13 +127,43 @@ void Visualizer::Update()
 		gettimeofday(&itsTimer, 0);
 		return;
 	}
-	void (Visualizer::*draw)(int16_t *, ssize_t, size_t, size_t);
-#	ifdef HAVE_FFTW3_H
-	if (!Config.visualizer_use_wave)
+
+	void (Visualizer::*draw)(int16_t *, ssize_t, size_t, size_t, bool);
+	bool color = false;
+#	ifndef HAVE_FFTW3_H
+	draw = &Visualizer::DrawSoundWave;
+#	else
+	if ( Config.visualizer_function == 1 )
+	{
 		draw = &Visualizer::DrawFrequencySpectrum;
-	else
-#	endif // HAVE_FFTW3_H
+		color = false;
+	}
+	else if ( Config.visualizer_function == 2 )
+	{
+		draw = &Visualizer::DrawSoundWaveAscii;
+		color = false;
+	}
+	else if ( Config.visualizer_function == 3 )
+	{
 		draw = &Visualizer::DrawSoundWave;
+		color = true;
+	}
+	else if ( Config.visualizer_function == 4 )
+	{
+		draw = &Visualizer::DrawSoundWaveAscii;
+		color = true;
+	}
+	else if ( Config.visualizer_function == 5 )
+	{
+		draw = &Visualizer::DrawFrequencySpectrum;
+		color = true;
+	}
+	else
+	{
+		draw = &Visualizer::DrawSoundWave;
+		color = false;
+	}
+#	endif // HAVE_FFTW3_H
 
 	w->Clear();
 	ssize_t samples_read = data/sizeof(int16_t);
@@ -147,19 +176,19 @@ void Visualizer::Update()
 			buf_right[j] = buf[i+1];
 		}
 		size_t half_height = MainHeight/2;
-		(this->*draw)(buf_left, samples_read/2, 0, half_height);
-		(this->*draw)(buf_right, samples_read/2, half_height+(draw == &Visualizer::DrawSoundWave ? 1 : 0), half_height+(draw != &Visualizer::DrawSoundWave ? 1 : 0));
+		(this->*draw)(buf_left, samples_read/2, 0, half_height, color);
+		(this->*draw)(buf_right, samples_read/2, half_height, half_height, color);
 	}
 	else
-		(this->*draw)(buf, samples_read, 0, MainHeight);
+		(this->*draw)(buf, samples_read, 0, MainHeight, color);
 	w->Refresh();
 }
 
 void Visualizer::SpacePressed()
 {
 #	ifdef HAVE_FFTW3_H
-	Config.visualizer_use_wave = !Config.visualizer_use_wave;
-	ShowMessage("Visualization type: %s", Config.visualizer_use_wave ? "Sound wave" : "Frequency spectrum");
+	Config.visualizer_function = ( Config.visualizer_function + 1 ) % 5;
+	ShowMessage("Visualization type: %s", Config.visualizer_function ? "Sound wave" : "Frequency spectrum");
 #	endif // HAVE_FFTW3_H
 }
 
@@ -175,9 +204,8 @@ char Visualizer::toAsciiGrey( int number, int max )
 	return asciiGreyScaleMap[ normalizedNumber ];
 }
 
-void Visualizer::DrawSoundWave(int16_t *buf, ssize_t samples, size_t y_offset, size_t height)
+void Visualizer::DrawSoundWave(int16_t *buf, ssize_t samples, size_t y_offset, size_t height, bool color)
 {
-
 	const int samples_per_col = samples/w->GetWidth();
 	const int half_height = height/2;
 	double prev_point_pos = 0;
@@ -206,8 +234,59 @@ void Visualizer::DrawSoundWave(int16_t *buf, ssize_t samples, size_t y_offset, s
 
 			if ( x > 0 && x < w->GetHeight() && (i-(k < half_height + point_pos)) > 0 && (i-(k < half_height + point_pos)) < w->GetWidth() )
 			{
-				*w << toColor( k, height );
-				//*w << XY(i-(k < half_height + point_pos), x) << Config.visualizer_chars[0];
+				if ( color )
+				{
+					*w << toColor( k, height );
+				}
+				else
+				{
+					*w << clDefault;
+				}
+				*w << XY(i-(k < half_height + point_pos), x) << Config.visualizer_chars[0];
+			}
+		}
+		prev_point_pos = point_pos;
+	}
+}
+
+void Visualizer::DrawSoundWaveAscii(int16_t *buf, ssize_t samples, size_t y_offset, size_t height, bool color)
+{
+	const int samples_per_col = samples/w->GetWidth();
+	const int half_height = height/2;
+	double prev_point_pos = 0;
+	const size_t win_width = w->GetWidth();
+	const bool left = y_offset > 0;
+	int x = 0;
+	for (size_t i = 0; i < win_width; ++i)
+	{
+		double point_pos = 0;
+		for (int j = 0; j < samples_per_col; ++j)
+			point_pos += buf[i*samples_per_col+j];
+		point_pos /= samples_per_col;
+		point_pos /= std::numeric_limits<int16_t>::max();
+		point_pos *= half_height;
+		for (int k = 0; k < point_pos * 2; k += 2)
+		{
+			x = height;
+			if ( left )
+			{
+				x += k;
+			}
+			else
+			{
+				x -= k;
+			}
+
+			if ( x > 0 && x < w->GetHeight() && (i-(k < half_height + point_pos)) > 0 && (i-(k < half_height + point_pos)) < w->GetWidth() )
+			{
+				if ( color )
+				{
+					*w << toColor( k, height );
+				}
+				else
+				{
+					*w << clDefault;
+				}
 				*w << XY(i-(k < half_height + point_pos), x) << toAsciiGrey( k, height );
 			}
 		}
@@ -216,7 +295,7 @@ void Visualizer::DrawSoundWave(int16_t *buf, ssize_t samples, size_t y_offset, s
 }
 
 #ifdef HAVE_FFTW3_H
-void Visualizer::DrawFrequencySpectrum(int16_t *buf, ssize_t samples, size_t y_offset, size_t height)
+void Visualizer::DrawFrequencySpectrum(int16_t *buf, ssize_t samples, size_t y_offset, size_t height, bool color)
 {
 	for (unsigned i = 0, j = 0; i < itsSamples; ++i)
 	{
@@ -247,12 +326,19 @@ void Visualizer::DrawFrequencySpectrum(int16_t *buf, ssize_t samples, size_t y_o
 
 		for (size_t j = start_y; j < stop_y; j += 1)
 		{
-			*w << colorHeight;
+			if ( color )
+			{
+				*w << colorHeight;
+			}
+			else
+			{
+				*w << clDefault;
+			}
 			*w << XY(i, j) << Config.visualizer_chars[1];
 		}
 	}
 }
-#endif // HAVE_FFTW3_H
+#endif
 
 void Visualizer::SetFD()
 {

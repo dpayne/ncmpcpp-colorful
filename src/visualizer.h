@@ -34,8 +34,11 @@
 # include <fftw3.h>
 #endif
 
+typedef void (*DrawFuncPtr)(int16_t *, ssize_t, size_t, size_t, bool);
+
 class Visualizer : public Screen<Window>
 {
+
 	public:
 		virtual void SwitchTo();
 		virtual void Resize();
@@ -69,9 +72,10 @@ class Visualizer : public Screen<Window>
 	private:
 		Color toColor( int number, int max );
 		char toAsciiGrey( int number, int max );
-		void DrawSoundWave(int16_t *, ssize_t, size_t, size_t);
+		void DrawSoundWave(int16_t *, ssize_t, size_t, size_t, bool);
+		void DrawSoundWaveAscii(int16_t *, ssize_t, size_t, size_t, bool);
 #		ifdef HAVE_FFTW3_H
-		void DrawFrequencySpectrum(int16_t *, ssize_t, size_t, size_t);
+		void DrawFrequencySpectrum(int16_t *, ssize_t, size_t, size_t, bool);
 #		endif // HAVE_FFTW3_H
 
 		int itsOutputID;

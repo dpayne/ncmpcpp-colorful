@@ -440,7 +440,7 @@ void NcmpcppConfig::SetDefaults()
 	mouse_support = true;
 	mouse_list_scroll_whole_page = true;
 	new_design = false;
-	visualizer_use_wave = true;
+	visualizer_function = 0;
 	visualizer_in_stereo = false;
 	browser_sort_by_mtime = false;
 	tag_editor_extended_numeration = false;
@@ -1152,7 +1152,7 @@ void NcmpcppConfig::Read()
 			}
 			else if (name == "visualizer_type")
 			{
-				visualizer_use_wave = v == "wave";
+				visualizer_function = IntoVisualizerDraw( v );
 			}
 			else if (name == "visualizer_in_stereo")
 			{
@@ -1406,3 +1406,4 @@ void NcmpcppConfig::MakeProperPath(std::string &dir)
 	if (*dir.rbegin() != '/')
 		dir += '/';
 }
+/* vim: set tabstop=4 softtabstop=4 shiftwidth=4 noexpandtab : */

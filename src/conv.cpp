@@ -71,6 +71,24 @@ std::string IntoStr(mpd_tag_type tag) // this is only for left column's title in
 	}
 }
 
+char IntoVisualizerDraw(const std::string &str)
+{
+	if ( str == "wave" )
+		return 0;
+	else if ( str == "spectrum" )
+		return 1;
+	else if ( str == "wave_ascii" )
+		return 2;
+	else if ( str == "wave_color" )
+		return 3;
+	else if ( str == "wave_ascii_color" )
+		return 4;
+	else if ( str == "spectrum_color" )
+		return 5;
+	else
+		return 0;
+}
+
 std::string IntoStr(NCurses::Color color)
 {
 	std::string result;
@@ -323,3 +341,4 @@ void Trim(std::string &s)
 		 s = s.substr(b);
 }
 
+/* vim: set tabstop=4 softtabstop=4 shiftwidth=4 noexpandtab : */

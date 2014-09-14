@@ -249,7 +249,7 @@ struct NcmpcppConfig
 	bool mouse_support;
 	bool mouse_list_scroll_whole_page;
 	bool new_design;
-	bool visualizer_use_wave;
+	char visualizer_function;
 	bool visualizer_in_stereo;
 	bool browser_sort_by_mtime;
 	bool tag_editor_extended_numeration;
@@ -296,3 +296,4 @@ void SetWindowsDimensions(size_t &header_height, size_t &footer_start_y, size_t 
 
 #endif
 
+/* vim: set tabstop=4 softtabstop=4 shiftwidth=4 noexpandtab : */
