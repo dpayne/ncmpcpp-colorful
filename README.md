@@ -3,7 +3,7 @@ ncmpcpp
 
 This is a version of ncmpcpp with more colorful visualizers. The original can be found here http://ncmpcpp.rybczak.net/
 
-Currently the visualizers are simple modifications to add color to the existing visualizers. The available visualizers are wave, wave_color, wave__ascii__color, spectrum, and spectrum_color.
+Currently, the new visualizers are simple modifications to add color to the existing visualizers. The available visualizers are wave, wave_color, wave_ascii_color, spectrum, and spectrum_color.
 
 Your ncmpcpp config should look something like this
 
@@ -31,4 +31,4 @@ audio_output {
 
 #### ScreenShots
 
-![](https://github.com/dpayne/imgs/waveform_color.png)
+![](https://github.com/dpayne/ncmpcpp-colorful/imgs/waveform_color.png)
