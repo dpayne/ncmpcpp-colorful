@@ -68,6 +68,7 @@ class Visualizer : public Screen<Window>
 
 	private:
 		Color toColor( int number, int max );
+		char toAsciiGrey( int number, int max );
 		void DrawSoundWave(int16_t *, ssize_t, size_t, size_t);
 #		ifdef HAVE_FFTW3_H
 		void DrawFrequencySpectrum(int16_t *, ssize_t, size_t, size_t);
@@ -93,3 +94,4 @@ extern Visualizer *myVisualizer;
 
 #endif
 
+/* vim: set tabstop=4 softtabstop=4 shiftwidth=4 noexpandtab : */

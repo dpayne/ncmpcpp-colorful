@@ -38,11 +38,9 @@ using Global::MainHeight;
 
 Visualizer *myVisualizer = new Visualizer;
 
-const int ColorsTable[] =
-{
-    COLOR_BLACK, COLOR_RED, COLOR_GREEN, COLOR_YELLOW,
-    COLOR_BLUE, COLOR_MAGENTA, COLOR_CYAN, COLOR_WHITE
-};
+const Color colorMap [] = { clWhite, clCyan, clBlue, clGreen, clYellow, clMagenta, clRed };
+const char asciiGreyScaleMap [] = { '@', '%', '#', '*', '+', '=', '-' };
+
 
 const int Visualizer::WindowTimeout = 1000/25; /* 25 fps */
 
@@ -128,7 +126,7 @@ void Visualizer::Update()
 		usleep(50000);
 		Mpd.EnableOutput(itsOutputID);
 		gettimeofday(&itsTimer, 0);
-        return;
+		return;
 	}
 	void (Visualizer::*draw)(int16_t *, ssize_t, size_t, size_t);
 #	ifdef HAVE_FFTW3_H
@@ -167,25 +165,14 @@ void Visualizer::SpacePressed()
 
 Color Visualizer::toColor( int number, int max )
 {
-    const int normalizedNumber = ( ( number * 7 ) / max ) % 7;
-    switch ( normalizedNumber ) {
-        case 0:
-            return clWhite;
-        case 1:
-            return clCyan;
-        case 2:
-            return clBlue;
-        case 3:
-            return clGreen;
-        case 4:
-            return clYellow;
-        case 5:
-            return clMagenta;
-        case 6:
-            return clRed;
-        default:
-            return clEnd;
-    }
+	const int normalizedNumber = ( ( number * 7 ) / max ) % 7;
+	return colorMap[ normalizedNumber ];
+}
+
+char Visualizer::toAsciiGrey( int number, int max )
+{
+	const int normalizedNumber = ( ( number * 7 ) / max ) % 7;
+	return asciiGreyScaleMap[ normalizedNumber ];
 }
 
 void Visualizer::DrawSoundWave(int16_t *buf, ssize_t samples, size_t y_offset, size_t height)
@@ -195,8 +182,8 @@ void Visualizer::DrawSoundWave(int16_t *buf, ssize_t samples, size_t y_offset, s
 	const int half_height = height/2;
 	double prev_point_pos = 0;
 	const size_t win_width = w->GetWidth();
-    const bool left = y_offset > 0;
-    int x = 0;
+	const bool left = y_offset > 0;
+	int x = 0;
 	for (size_t i = 0; i < win_width; ++i)
 	{
 		double point_pos = 0;
@@ -205,24 +192,25 @@ void Visualizer::DrawSoundWave(int16_t *buf, ssize_t samples, size_t y_offset, s
 		point_pos /= samples_per_col;
 		point_pos /= std::numeric_limits<int16_t>::max();
 		point_pos *= half_height;
-        for (int k = 0; k < point_pos * 2; k += 2)
-        {
-            x = height;
-            if ( left )
-            {
-                x += k;
-            }
-            else
-            {
-                x -= k;
-            }
+		for (int k = 0; k < point_pos * 2; k += 2)
+		{
+			x = height;
+			if ( left )
+			{
+				x += k;
+			}
+			else
+			{
+				x -= k;
+			}
 
-            if ( x > 0 && x < w->GetHeight() && (i-(k < half_height + point_pos)) > 0 && (i-(k < half_height + point_pos)) < w->GetWidth() )
-            {
-                *w << toColor( k, height );
-                *w << XY(i-(k < half_height + point_pos), x) << Config.visualizer_chars[0];
-            }
-        }
+			if ( x > 0 && x < w->GetHeight() && (i-(k < half_height + point_pos)) > 0 && (i-(k < half_height + point_pos)) < w->GetWidth() )
+			{
+				*w << toColor( k, height );
+				//*w << XY(i-(k < half_height + point_pos), x) << Config.visualizer_chars[0];
+				*w << XY(i-(k < half_height + point_pos), x) << toAsciiGrey( k, height );
+			}
+		}
 		prev_point_pos = point_pos;
 	}
 }
@@ -255,13 +243,13 @@ void Visualizer::DrawFrequencySpectrum(int16_t *buf, ssize_t samples, size_t y_o
 		bar_height = std::min(bar_height/freqs_per_col, height);
 		const size_t start_y = y_offset > 0 ? y_offset : height-bar_height;
 		const size_t stop_y = std::min(bar_height+start_y, w->GetHeight());
-        const Color colorHeight = toColor( i, win_width );
+		const Color colorHeight = toColor( i, win_width );
 
 		for (size_t j = start_y; j < stop_y; j += 1)
-        {
-            *w << colorHeight;
+		{
+			*w << colorHeight;
 			*w << XY(i, j) << Config.visualizer_chars[1];
-        }
+		}
 	}
 }
 #endif // HAVE_FFTW3_H
@@ -294,3 +282,4 @@ void Visualizer::FindOutputID()
 
 #endif // ENABLE_VISUALIZER
 
+/* vim: set tabstop=4 softtabstop=4 shiftwidth=4 noexpandtab : */
