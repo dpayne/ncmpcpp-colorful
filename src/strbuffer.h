@@ -29,6 +29,39 @@
 
 namespace NCurses
 {
+	template <typename C> class basic_buffer;
+	template <typename C> NCurses::Window &operator<<(NCurses::Window &w, const NCurses::basic_buffer<C> &buf)
+	{
+		const std::basic_string<C> &s = buf.itsTempString ? *buf.itsTempString : buf.itsString.str();
+		if (buf.itsFormat.empty())
+		{
+			w << s;
+		}
+		else
+		{
+			std::basic_string<C> tmp;
+			typename std::list<typename NCurses::basic_buffer<C>::FormatPos>::const_iterator b = buf.itsFormat.begin();
+			typename std::list<typename NCurses::basic_buffer<C>::FormatPos>::const_iterator e = buf.itsFormat.end();
+			for (size_t i = 0; i < s.length() || b != e; ++i)
+			{
+				while (b != e && i == b->Position)
+				{
+					if (!tmp.empty())
+					{
+						w << tmp;
+						tmp.clear();
+					}
+					buf.LoadAttribute(w, b->Value);
+					b++;
+				}
+				if (i < s.length())
+					tmp += s[i];
+			}
+			if (!tmp.empty())
+				w << tmp;
+		}
+		return w;
+	}
 	/// Buffer template class that can store text along with its
 	/// format attributes. The content can be easily printed to
 	/// window or taken as raw string at any time.
@@ -42,45 +75,45 @@ namespace NCurses
 		{
 			size_t Position;
 			short Value;
-			
-			bool operator<(const FormatPos &f)
+
+			bool operator<(const FormatPos &f) const
 			{
 				return Position < f.Position;
 			}
-			
+
 			bool operator==(const FormatPos &f)
 			{
 				return Position == f.Position && Value == f.Value;
 			}
 		};
-		
+
 		/// Internal buffer for storing raw text
 		///
 		std::basic_ostringstream<C> itsString;
-		
+
 		/// List used for storing formatting informations
 		///
 		std::list<FormatPos> itsFormat;
-		
+
 		/// Pointer to temporary string
 		/// @see SetTemp()
 		///
 		std::basic_string<C> *itsTempString;
-		
+
 		public:
 			/// Constructs an empty buffer
 			///
 			basic_buffer() : itsTempString(0) { }
-			
+
 			/// Constructs a buffer from the existed one
 			/// @param b copied buffer
 			///
 			basic_buffer(const basic_buffer &b);
-			
+
 			/// @return raw content of the buffer without formatting informations
 			///
 			std::basic_string<C> Str() const;
-			
+
 			/// Searches for given string in buffer and sets format/color at the
 			/// beginning and end of it using val_b and val_e flags accordingly
 			/// @param val_b flag set at the beginning of found occurence of string
@@ -93,7 +126,7 @@ namespace NCurses
 			///
 			bool SetFormatting(short val_b, std::basic_string<C> s, short val_e,
 					   bool case_sensitive, bool for_each = 1);
-			
+
 			/// Searches for given string in buffer and removes given
 			/// format/color from the beginning and end of its occurence
 			/// @param val_b flag to be removed from the beginning of the string
@@ -105,11 +138,11 @@ namespace NCurses
 			///
 			void RemoveFormatting(short val_b, std::basic_string<C> pattern, short val_e,
 					      bool case_sensitive, bool for_each = 1);
-			
+
 			/// Removes all formating applied to string in buffer.
 			///
 			void RemoveFormatting();
-			
+
 			/// Sets the pointer to string, that will be passed in operator<<() to window
 			/// object instead of the internal buffer. This is useful if you took the content
 			/// of the buffer, modified it somehow and want to print the modified version instead
@@ -118,7 +151,7 @@ namespace NCurses
 			/// @param tmp address of the temporary string
 			///
 			void SetTemp(std::basic_string<C> *tmp);
-			
+
 			/// Prints to window object given part of the string, loading all needed formatting info
 			/// and cleaning up after. The main goal of this function is to provide interface for
 			/// colorful scrollers.
@@ -131,11 +164,11 @@ namespace NCurses
 			///
 			void Write(Window &w, size_t &start_pos, size_t width,
 				   const std::basic_string<C> &separator) const;
-			
+
 			/// Clears the content of the buffer and its formatting informations
 			///
 			void Clear();
-			
+
 			/// @param t any object that has defined ostream &operator<<()
 			/// @return reference to itself
 			///
@@ -144,27 +177,27 @@ namespace NCurses
 				itsString << t;
 				return *this;
 			}
-			
+
 			/// Handles colors
 			/// @return reference to itself
 			///
 			basic_buffer<C> &operator<<(Color color);
-			
+
 			/// Handles format flags
 			/// @return reference to itself
 			///
 			basic_buffer<C> &operator<<(Format f);
-			
+
 			/// Handles copying one buffer to another using operator<<()
 			/// @param buf buffer to be copied
 			/// @return reference to itself
 			///
 			basic_buffer<C> &operator<<(const basic_buffer<C> &buf);
-			
+
 			/// Friend operator, that handles printing
 			/// the content of buffer to window object
 			friend Window &operator<< <>(Window &, const basic_buffer<C> &);
-			
+
 		private:
 			/// Loads an attribute to given window object
 			/// @param w window object we want to load attribute to
@@ -172,11 +205,11 @@ namespace NCurses
 			///
 			void LoadAttribute(Window &w, short value) const;
 	};
-	
+
 	/// Standard buffer that uses narrow characters
 	///
 	typedef basic_buffer<char> Buffer;
-	
+
 	/// Standard buffer that uses wide characters
 	///
 	typedef basic_buffer<wchar_t> WBuffer;
@@ -275,12 +308,12 @@ template <typename C> void NCurses::basic_buffer<C>::Write(	Window &w,
 {
 	std::basic_string<C> s = itsString.str();
 	size_t len = Window::Length(s);
-	
+
 	if (len > width)
 	{
 		s += separator;
 		len = 0;
-		
+
 		typename std::list<typename NCurses::basic_buffer<C>::FormatPos>::const_iterator lb = itsFormat.begin();
 		if (itsFormat.back().Position > start_pos) // if there is no attributes from current position, don't load them
 		{
@@ -288,7 +321,7 @@ template <typename C> void NCurses::basic_buffer<C>::Write(	Window &w,
 			for (; lb->Position < start_pos; ++lb)
 				LoadAttribute(w, lb->Value);
 		}
-		
+
 		for (size_t i = start_pos; i < s.length() && len < width; ++i)
 		{
 			while (i == lb->Position && lb != itsFormat.end())
@@ -302,7 +335,7 @@ template <typename C> void NCurses::basic_buffer<C>::Write(	Window &w,
 		}
 		if (++start_pos >= s.length())
 			start_pos = 0;
-		
+
 		if (len < width)
 			lb = itsFormat.begin();
 		for (size_t i = 0; len < width; ++i)
@@ -362,39 +395,6 @@ template <typename C> NCurses::basic_buffer<C> &NCurses::basic_buffer<C>::operat
 			it->Position += len;
 	itsFormat.merge(tmp);
 	return *this;
-}
-
-template <typename C> NCurses::Window &operator<<(NCurses::Window &w, const NCurses::basic_buffer<C> &buf)
-{
-	const std::basic_string<C> &s = buf.itsTempString ? *buf.itsTempString : buf.itsString.str();
-	if (buf.itsFormat.empty())
-	{
-		w << s;
-	}
-	else
-	{
-		std::basic_string<C> tmp;
-		typename std::list<typename NCurses::basic_buffer<C>::FormatPos>::const_iterator b = buf.itsFormat.begin();
-		typename std::list<typename NCurses::basic_buffer<C>::FormatPos>::const_iterator e = buf.itsFormat.end();
-		for (size_t i = 0; i < s.length() || b != e; ++i)
-		{
-			while (b != e && i == b->Position)
-			{
-				if (!tmp.empty())
-				{
-					w << tmp;
-					tmp.clear();
-				}
-				buf.LoadAttribute(w, b->Value);
-				b++;
-			}
-			if (i < s.length())
-				tmp += s[i];
-		}
-		if (!tmp.empty())
-			w << tmp;
-	}
-	return w;
 }
 
 #endif
