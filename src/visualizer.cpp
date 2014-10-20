@@ -351,8 +351,8 @@ void Visualizer::DrawFrequencySpectrum(int16_t *buf, ssize_t samples, size_t y_o
 		bar_height = std::min(bar_height/freqs_per_col, height);
 		const size_t start_y = y_offset > 0 ? y_offset : height-bar_height;
 		const size_t stop_y = std::min(bar_height+start_y, w->GetHeight());
-		const Color colorHeight = toColor( i, win_width );
 
+		Color colorHeight;
 		for (size_t j = start_y; j < stop_y; j += 1)
 		{
 			if ( color )
@@ -363,6 +363,7 @@ void Visualizer::DrawFrequencySpectrum(int16_t *buf, ssize_t samples, size_t y_o
 			{
 				*w << clDefault;
 			}
+            colorHeight = toColor( j, stop_y );
 			*w << XY(i, j) << Config.visualizer_chars[1];
 		}
 	}
