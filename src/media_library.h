@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,94 +18,144 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _H_MEDIA_LIBRARY
-#define _H_MEDIA_LIBRARY
+#ifndef NCMPCPP_MEDIA_LIBRARY_H
+#define NCMPCPP_MEDIA_LIBRARY_H
 
-#include "ncmpcpp.h"
+#include <boost/date_time/posix_time/posix_time_types.hpp>
+
+#include "interfaces.h"
 #include "screen.h"
 
-class MediaLibrary : public Screen<Window>
+struct MediaLibrary: Screen<NC::Window *>, Filterable, HasColumns, HasSongs, Searchable, Tabbable
 {
-	struct SearchConstraints
-	{
-		SearchConstraints(const std::string &tag, const std::string &album, const std::string &year) : PrimaryTag(tag), Album(album), Year(year) { }
-		SearchConstraints(const std::string &album, const std::string &year) : Album(album), Year(year) { }
-		
-		std::string PrimaryTag;
-		std::string Album;
-		std::string Year;
-	};
+	MediaLibrary();
 	
-	struct SearchConstraintsSorting
-	{
-		bool operator()(const SearchConstraints &a, const SearchConstraints &b) const;
-	};
+	virtual void switchTo() OVERRIDE;
+	virtual void resize() OVERRIDE;
 	
-	public:
-		virtual void SwitchTo();
-		virtual void Resize();
+	virtual std::wstring title() OVERRIDE;
+	virtual ScreenType type() OVERRIDE { return ScreenType::MediaLibrary; }
+	
+	virtual void refresh() OVERRIDE;
+	virtual void update() OVERRIDE;
+	
+	virtual int windowTimeout() OVERRIDE;
+
+	virtual void enterPressed() OVERRIDE;
+	virtual void spacePressed() OVERRIDE;
+	virtual void mouseButtonPressed(MEVENT me) OVERRIDE;
+	
+	virtual bool isMergable() OVERRIDE { return true; }
+	
+	// Filterable implementation
+	virtual bool allowsFiltering() OVERRIDE;
+	virtual std::string currentFilter() OVERRIDE;
+	virtual void applyFilter(const std::string &filter) OVERRIDE;
+	
+	// Searchable implementation
+	virtual bool allowsSearching() OVERRIDE;
+	virtual bool search(const std::string &constraint) OVERRIDE;
+	virtual void nextFound(bool wrap) OVERRIDE;
+	virtual void prevFound(bool wrap) OVERRIDE;
+	
+	// HasSongs implementation
+	virtual ProxySongList proxySongList() OVERRIDE;
+	
+	virtual bool allowsSelection() OVERRIDE;
+	virtual void reverseSelection() OVERRIDE;
+	virtual MPD::SongList getSelectedSongs() OVERRIDE;
+	
+	// HasColumns implementation
+	virtual bool previousColumnAvailable() OVERRIDE;
+	virtual void previousColumn() OVERRIDE;
+	
+	virtual bool nextColumnAvailable() OVERRIDE;
+	virtual void nextColumn() OVERRIDE;
+	
+	// private members
+	void updateTimer();
+	void toggleColumnsMode();
+	int Columns();
+	void LocateSong(const MPD::Song &);
+	ProxySongList songsProxyList();
+	void toggleSortMode();
+	
+	void requestTagsUpdate() { m_tags_update_request = true; }
+	void requestAlbumsUpdate() { m_albums_update_request = true; }
+	void requestSongsUpdate() { m_songs_update_request = true; }
+	
+	struct PrimaryTag
+	{
+		PrimaryTag() : m_mtime(0) { }
+		PrimaryTag(std::string tag_, time_t mtime_)
+		: m_tag(std::move(tag_)), m_mtime(mtime_) { }
 		
-		virtual std::basic_string<my_char_t> Title();
-		
-		virtual void Refresh();
-		virtual void Update();
-		
-		virtual void EnterPressed() { AddToPlaylist(1); }
-		virtual void SpacePressed();
-		virtual void MouseButtonPressed(MEVENT);
-		virtual bool isTabbable() { return true; }
-		
-		virtual MPD::Song *CurrentSong();
-		virtual MPD::Song *GetSong(size_t pos) { return w == Songs ? &Songs->at(pos) : 0; }
-		
-		virtual bool allowsSelection() { return true; }
-		virtual void ReverseSelection();
-		virtual void GetSelectedSongs(MPD::SongList &);
-		
-		virtual void ApplyFilter(const std::string &);
-		
-		virtual List *GetList();
-		
-		virtual bool isMergable() { return true; }
-		
-		int Columns() { return hasTwoColumns ? 2 : 3; }
-		bool NextColumn();
-		bool PrevColumn();
-		
-		void LocateSong(const MPD::Song &);
-		
-		Menu<std::string> *Artists;
-		Menu<SearchConstraints> *Albums;
-		Menu<MPD::Song> *Songs;
-		
-	protected:
-		virtual void Init();
-		virtual bool isLockable() { return true; }
+		const std::string &tag() const { return m_tag; }
+		time_t mtime() const { return m_mtime; }
 		
 	private:
-		void AddToPlaylist(bool);
+		std::string m_tag;
+		time_t m_mtime;
+	};
+	
+	struct Album
+	{
+		Album(std::string tag_, std::string album_, std::string date_, time_t mtime_)
+		: m_tag(std::move(tag_)), m_album(std::move(album_))
+		, m_date(std::move(date_)), m_mtime(mtime_) { }
 		
-		static std::string SongToString(const MPD::Song &s, void *);
+		const std::string &tag() const { return m_tag; }
+		const std::string &album() const { return m_album; }
+		const std::string &date() const { return m_date; }
+		time_t mtime() const { return m_mtime; }
 		
-		static std::string AlbumToString(const SearchConstraints &, void *);
-		static void DisplayAlbums(const SearchConstraints &, void *, Menu<SearchConstraints> *);
-		static void DisplayPrimaryTags(const std::string &artist, void *, Menu<std::string> *menu);
+	private:
+		std::string m_tag;
+		std::string m_album;
+		std::string m_date;
+		time_t m_mtime;
+	};
+	
+	struct AlbumEntry
+	{
+		AlbumEntry() : m_all_tracks_entry(false), m_album("", "", "", 0) { }
+		AlbumEntry(Album album_) : m_all_tracks_entry(false), m_album(album_) { }
 		
-		static bool SortSongsByTrack(MPD::Song *, MPD::Song *);
-		static bool SortAllTracks(MPD::Song *, MPD::Song *);
+		const Album &entry() const { return m_album; }
+		bool isAllTracksEntry() const { return m_all_tracks_entry; }
 		
-		static bool hasTwoColumns;
-		static size_t itsLeftColStartX;
-		static size_t itsLeftColWidth;
-		static size_t itsMiddleColWidth;
-		static size_t itsMiddleColStartX;
-		static size_t itsRightColWidth;
-		static size_t itsRightColStartX;
+		static AlbumEntry mkAllTracksEntry(std::string tag) {
+			auto result = AlbumEntry(Album(tag, "", "", 0));
+			result.m_all_tracks_entry = true;
+			return result;
+		}
 		
-		static const char AllTracksMarker[];
+	private:
+		bool m_all_tracks_entry;
+		Album m_album;
+	};
+	
+	NC::Menu<PrimaryTag> Tags;
+	NC::Menu<AlbumEntry> Albums;
+	NC::Menu<MPD::Song> Songs;
+	
+protected:
+	virtual bool isLockable() OVERRIDE { return true; }
+	
+private:
+	void AddToPlaylist(bool);
+	
+	bool m_tags_update_request;
+	bool m_albums_update_request;
+	bool m_songs_update_request;
+
+	boost::posix_time::ptime m_timer;
+
+	const int m_window_timeout;
+	const boost::posix_time::time_duration m_fetching_delay;
 };
 
 extern MediaLibrary *myLibrary;
 
-#endif
+#endif // NCMPCPP_MEDIA_LIBRARY_H
 

@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,41 +18,46 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _GLOBAL_H
-#define _GLOBAL_H
+#ifndef NCMPCPP_GLOBAL_H
+#define NCMPCPP_GLOBAL_H
 
-#include <sys/time.h>
-
-#include "ncmpcpp.h"
+#include <boost/date_time/posix_time/posix_time_types.hpp>
 #include "mpdpp.h"
 #include "screen.h"
 
-namespace Global
-{
-	extern BasicScreen *myScreen;
-	extern BasicScreen *myOldScreen;	// for info, lyrics, popups
-	extern BasicScreen *myPrevScreen;	// "real" screen switching (browser, search, etc.)
-	extern BasicScreen *myLockedScreen;     // points at the screen that was locked (or is null if no screen is locked)
-	extern BasicScreen *myInactiveScreen;   // points at inactive screen, if locking was enabled and two screens are displayed
-	
-	extern Window *wHeader;
-	extern Window *wFooter;
-	
-	extern size_t MainStartY;
-	extern size_t MainHeight;
-	
-	extern bool BlockItemListUpdate;
-	
-	extern bool UpdateStatusImmediately;
-	extern bool MessagesAllowed;
-	extern bool SeekingInProgress;
-	extern bool RedrawHeader;
-	extern bool RedrawStatusbar;
-	
-	extern std::string VolumeState;
-	
-	extern timeval Timer;
+namespace Global {//
+
+// currently active screen (displayed in main window)
+extern BaseScreen *myScreen;
+
+// points at the screen that was locked (or is null if no screen is locked)
+extern BaseScreen *myLockedScreen;
+
+// points at inactive screen, if locking was enabled and two screens are displayed
+extern BaseScreen *myInactiveScreen;
+
+// header window (above main window)
+extern NC::Window *wHeader;
+
+// footer window (below main window)
+extern NC::Window *wFooter;
+
+// Y coordinate of top of main window
+extern size_t MainStartY;
+
+// height of main window
+extern size_t MainHeight;
+
+// indicates whether seeking action in currently in progress
+extern bool SeekingInProgress;
+
+// string that represents volume in right top corner. being global
+// to be used for calculating width offsets in various files.
+extern std::string VolumeState;
+
+// global timer
+extern boost::posix_time::ptime Timer;
+
 }
 
-#endif
-
+#endif // NCMPCPP_GLOBAL_H

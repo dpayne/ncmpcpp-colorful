@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -20,408 +20,455 @@
 
 #include "mpdpp.h"
 
+#include "bindings.h"
 #include "global.h"
 #include "help.h"
 #include "settings.h"
-#include "tag_editor.h"
+#include "status.h"
+#include "utility/wide_string.h"
+#include "title.h"
+#include "screen_switcher.h"
 
 using Global::MainHeight;
 using Global::MainStartY;
 
-Help *myHelp = new Help;
+Help *myHelp;
 
-void Help::Init()
+namespace {
+
+std::string key_to_string(const Key &key, bool *print_backspace)
 {
-	w = new Scrollpad(0, MainStartY, COLS, MainHeight, "", Config.main_color, brNone);
-	GetKeybindings();
-	w->Flush();
-	isInitialized = 1;
-}
-
-void Help::Resize()
-{
-	size_t x_offset, width;
-	GetWindowResizeParams(x_offset, width);
-	w->Resize(width, MainHeight);
-	w->MoveTo(x_offset, MainStartY);
-	hasToBeResized = 0;
-}
-
-void Help::SwitchTo()
-{
-	using Global::myScreen;
-	using Global::myLockedScreen;
-	
-	if (myScreen == this)
-		return;
-	
-	if (!isInitialized)
-		Init();
-	
-	if (myLockedScreen)
-		UpdateInactiveScreen(this);
-	
-	if (hasToBeResized || myLockedScreen)
-		Resize();
-	
-	if (myScreen != this && myScreen->isTabbable())
-		Global::myPrevScreen = myScreen;
-	myScreen = this;
-	Global::RedrawHeader = 1;
-
-}
-
-std::basic_string<my_char_t> Help::Title()
-{
-	return U("Help");
-}
-
-std::string Help::DisplayKeys(int *key, int size)
-{
-	bool backspace = 1;
-	std::string result = "\t";
-	for (int i = 0; i < size; i++)
+	std::string result;
+	if (key == Key(KEY_UP, Key::NCurses))
+		result += "Up";
+	else if (key == Key(KEY_DOWN, Key::NCurses))
+		result += "Down";
+	else if (key == Key(KEY_PPAGE, Key::NCurses))
+		result += "Page Up";
+	else if (key == Key(KEY_NPAGE, Key::NCurses))
+		result += "Page Down";
+	else if (key == Key(KEY_HOME, Key::NCurses))
+		result += "Home";
+	else if (key == Key(KEY_END, Key::NCurses))
+		result += "End";
+	else if (key == Key(KEY_SPACE, Key::Standard))
+		result += "Space";
+	else if (key == Key(KEY_ENTER, Key::Standard))
+		result += "Enter";
+	else if (key == Key(KEY_IC, Key::NCurses))
+		result += "Insert";
+	else if (key == Key(KEY_DC, Key::NCurses))
+		result += "Delete";
+	else if (key == Key(KEY_RIGHT, Key::NCurses))
+		result += "Right";
+	else if (key == Key(KEY_LEFT, Key::NCurses))
+		result += "Left";
+	else if (key == Key(KEY_TAB, Key::Standard))
+		result += "Tab";
+	else if (key == Key(KEY_SHIFT_TAB, Key::NCurses))
+		result += "Shift-Tab";
+	else if (key >= Key(KEY_CTRL_A, Key::Standard) && key <= Key(KEY_CTRL_Z, Key::Standard))
 	{
-		if (key[i] == NcmpcppKeys::NullKey);
-		else if (key[i] == 259)
-			result += "Up";
-		else if (key[i] == 258)
-			result += "Down";
-		else if (key[i] == 339)
-			result += "Page Up";
-		else if (key[i] == 338)
-			result += "Page Down";
-		else if (key[i] == 262)
-			result += "Home";
-		else if (key[i] == 360)
-			result += "End";
-		else if (key[i] == 32)
-			result += "Space";
-		else if (key[i] == 10)
-			result += "Enter";
-		else if (key[i] == 330)
-			result += "Delete";
-		else if (key[i] == 261)
-			result += "Right";
-		else if (key[i] == 260)
-			result += "Left";
-		else if (key[i] == 9)
-			result += "Tab";
-		else if (key[i] == 353)
-			result += "Shift-Tab";
-		else if (key[i] >= 1 && key[i] <= 26)
-		{
-			result += "Ctrl-";
-			result += key[i]+64;
-		}
-		else if (key[i] >= 265 && key[i] <= 276)
-		{
-			result += "F";
-			result += IntoStr(key[i]-264);
-		}
-		else if ((key[i] == 263 || key[i] == 127) && !backspace);
-		else if ((key[i] == 263 || key[i] == 127) && backspace)
+		result += "Ctrl-";
+		result += key.getChar()+64;
+	}
+	else if (key >= Key(KEY_F1, Key::NCurses) && key <= Key(KEY_F12, Key::NCurses))
+	{
+		result += "F";
+		result += boost::lexical_cast<std::string>(key.getChar()-264);
+	}
+	else if ((key == Key(KEY_BACKSPACE, Key::NCurses) || key == Key(KEY_BACKSPACE_2, Key::Standard)))
+	{
+		// since some terminals interpret KEY_BACKSPACE as backspace and other need KEY_BACKSPACE_2,
+		// actions have to be bound to either of them, but we want to display "Backspace" only once,
+		// hance this 'print_backspace' switch.
+		if (!print_backspace || *print_backspace)
 		{
 			result += "Backspace";
-			backspace = 0;
+			if (print_backspace)
+				*print_backspace = false;
 		}
-		else
-			result += key[i];
-		result += " ";
 	}
-	if (result.length() > 12)
-		result = result.substr(0, 12);
-	for (size_t i = result.length(); i <= 12; result += " ", ++i) { }
-	result += ": ";
+	else
+		result += ToString(std::wstring(1, key.getChar()));
 	return result;
 }
 
-void Help::GetKeybindings()
+std::string display_keys(const Actions::Type at)
 {
-	*w << "   " << fmtBold << "Keys - Movement\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << DisplayKeys(Key.Up)			<< "Move Cursor up\n";
-	*w << DisplayKeys(Key.Down)			<< "Move Cursor down\n";
-	*w << DisplayKeys(Key.UpAlbum)			<< "Move Cursor up one album\n";
-	*w << DisplayKeys(Key.DownAlbum)		<< "Move Cursor down one album\n";
-	*w << DisplayKeys(Key.UpArtist)			<< "Move Cursor up one artist\n";
-	*w << DisplayKeys(Key.DownArtist)		<< "Move Cursor down one artist\n";
-	*w << DisplayKeys(Key.PageUp)			<< "Page up\n";
-	*w << DisplayKeys(Key.PageDown)			<< "Page down\n";
-	*w << DisplayKeys(Key.Home)			<< "Home\n";
-	*w << DisplayKeys(Key.End)			<< "End\n";
-	*w << "\n";
-	if (Config.screen_switcher_previous)
-		*w << DisplayKeys(Key.ScreenSwitcher)   << "Switch between current and last screen\n";
-	else
+	bool print_backspace = true;
+	std::string result, skey;
+	for (auto it = Bindings.begin(); it != Bindings.end(); ++it)
 	{
-		*w << DisplayKeys(Key.ScreenSwitcher)   << "Switch to next screen in sequence\n";
-		*w << DisplayKeys(Key.BackwardScreenSwitcher) << "Switch to previous screen in sequence\n";
+		for (auto j = it->second.begin(); j != it->second.end(); ++j)
+		{
+			if (j->isSingle() && j->action()->type() == at)
+			{
+				skey = key_to_string(it->first, &print_backspace);
+				if (!skey.empty())
+				{
+					result += std::move(skey);
+					result += " ";
+				}
+			}
+		}
 	}
-	*w << DisplayKeys(Key.Help)			<< "Help screen\n";
-	*w << DisplayKeys(Key.Playlist)			<< "Playlist screen\n";
-	*w << DisplayKeys(Key.Browser)			<< "Browse screen\n";
-	*w << DisplayKeys(Key.SearchEngine)		<< "Search engine\n";
-	*w << DisplayKeys(Key.MediaLibrary)		<< "Media library\n";
-	*w << DisplayKeys(Key.PlaylistEditor)		<< "Playlist editor\n";
-#	ifdef HAVE_TAGLIB_H
-	*w << DisplayKeys(Key.TagEditor)		<< "Tag editor\n";
-#	endif // HAVE_TAGLIB_H
-#	ifdef ENABLE_OUTPUTS
-	*w << DisplayKeys(Key.Outputs)			<< "Outputs\n";
-#	endif // ENABLE_OUTPUTS
-#	ifdef ENABLE_VISUALIZER
-	*w << DisplayKeys(Key.Visualizer)		<< "Music visualizer\n";
-#	endif // ENABLE_VISUALIZER
-#	ifdef ENABLE_CLOCK
-	*w << DisplayKeys(Key.Clock)			<< "Clock screen\n";
-#	endif // ENABLE_CLOCK
-	*w << "\n";
-	*w << DisplayKeys(Key.ServerInfo)		<< "MPD server info\n";
-	
-	*w << "\n\n   " << fmtBold << "Keys - Global\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << DisplayKeys(Key.Stop)			<< "Stop\n";
-	*w << DisplayKeys(Key.Pause)			<< "Pause\n";
-	*w << DisplayKeys(Key.Next)			<< "Next track\n";
-	*w << DisplayKeys(Key.Prev)			<< "Previous track\n";
-	*w << DisplayKeys(Key.Replay)			<< "Play current track from the beginning\n";
-	*w << DisplayKeys(Key.SeekForward)		<< "Seek forward\n";
-	*w << DisplayKeys(Key.SeekBackward)		<< "Seek backward\n";
-	*w << DisplayKeys(Key.VolumeDown)		<< "Decrease volume\n";
-	*w << DisplayKeys(Key.VolumeUp)			<< "Increase volume\n";
-	*w << "\n";
-	*w << DisplayKeys(Key.ToggleSpaceMode)		<< "Toggle space mode (select/add)\n";
-	*w << DisplayKeys(Key.ToggleAddMode)		<< "Toggle add mode\n";
-	*w << DisplayKeys(Key.ToggleMouse)		<< "Toggle mouse support\n";
-	*w << DisplayKeys(Key.ReverseSelection)		<< "Reverse selection\n";
-	*w << DisplayKeys(Key.DeselectAll)		<< "Deselect all items\n";
-	*w << DisplayKeys(Key.SelectAlbum)		<< "Select songs of album around cursor\n";
-	*w << DisplayKeys(Key.AddSelected)		<< "Add selected items to playlist/m3u file\n";
-	*w << "\n";
-	*w << DisplayKeys(Key.ToggleRepeat)		<< "Toggle repeat mode\n";
-	*w << DisplayKeys(Key.ToggleRandom)		<< "Toggle random mode\n";
-	*w << DisplayKeys(Key.ToggleSingle)		<< "Toggle single mode\n";
-	*w << DisplayKeys(Key.ToggleConsume)		<< "Toggle consume mode\n";
-	if (Mpd.Version() >= 16)
-		*w << DisplayKeys(Key.ToggleReplayGainMode)	<< "Toggle replay gain mode\n";
-	*w << DisplayKeys(Key.ToggleBitrateVisibility)	<< "Toggle bitrate visibility\n";
-	*w << DisplayKeys(Key.Shuffle)			<< "Shuffle playlist\n";
-	*w << DisplayKeys(Key.ToggleCrossfade)		<< "Toggle crossfade mode\n";
-	*w << DisplayKeys(Key.SetCrossfade)		<< "Set crossfade\n";
-	*w << DisplayKeys(Key.UpdateDB)			<< "Start a music database update\n";
-	*w << "\n";
-	*w << DisplayKeys(Key.ApplyFilter)		<< "Apply filter\n";
-	*w << DisplayKeys(Key.FindForward)		<< "Forward find\n";
-	*w << DisplayKeys(Key.FindBackward)		<< "Backward find\n";
-	*w << DisplayKeys(Key.PrevFoundPosition)	<< "Go to previous found position\n";
-	*w << DisplayKeys(Key.NextFoundPosition)	<< "Go to next found position\n";
-	*w << DisplayKeys(Key.ToggleFindMode)		<< "Toggle find mode (normal/wrapped)\n";
-	*w << DisplayKeys(Key.GoToContainingDir)	<< "Locate song in browser\n";
-	*w << DisplayKeys(Key.GoToMediaLibrary)		<< "Locate current song in media library\n";
-	*w << DisplayKeys(Key.ToggleScreenLock)		<< "Lock/unlock current screen\n";
-#	ifdef HAVE_TAGLIB_H
-	*w << DisplayKeys(Key.GoToTagEditor)		<< "Locate current song in tag editor\n";
-#	endif // HAVE_TAGLIB_H
-	*w << DisplayKeys(Key.ToggleDisplayMode)	<< "Toggle display mode\n";
-	*w << DisplayKeys(Key.ToggleInterface)		<< "Toggle user interface\n";
-	*w << DisplayKeys(Key.ToggleSeparatorsInPlaylist) << "Toggle displaying separators between albums\n";
-	*w << DisplayKeys(Key.GoToPosition)		<< "Go to given position in current song (in % by default)\n";
-	*w << DisplayKeys(Key.SongInfo)			<< "Show song info\n";
-#	ifdef HAVE_CURL_CURL_H
-	*w << DisplayKeys(Key.ArtistInfo)		<< "Show artist info\n";
-	*w << DisplayKeys(Key.ToggleLyricsDB)		<< "Toggle lyrics database\n";
-	*w << DisplayKeys(Key.ToggleFetchingLyricsInBackground) << "Toggle fetching lyrics for current song in background\n";
-#	endif // HAVE_CURL_CURL_H
-	*w << DisplayKeys(Key.Lyrics)			<< "Show/hide song's lyrics\n";
-	*w << "\n";
-	*w << DisplayKeys(Key.Quit)			<< "Quit\n";
-	
-	
-	*w << "\n\n   " << fmtBold << "Keys - Playlist\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << DisplayKeys(Key.Enter)			<< "Play\n";
-	*w << DisplayKeys(Key.SwitchTagTypeList)	<< "Add random songs/artists/albums to playlist\n";
-	*w << DisplayKeys(Key.Delete)			<< "Delete item/selected items from playlist\n";
-	*w << DisplayKeys(Key.Clear)			<< "Clear playlist\n";
-	*w << DisplayKeys(Key.Crop)			<< "Clear playlist but hold currently playing/selected items\n";
-	*w << DisplayKeys(Key.MvSongUp)			<< "Move item(s) up\n";
-	*w << DisplayKeys(Key.MvSongDown)		<< "Move item(s) down\n";
-	*w << DisplayKeys(Key.MoveTo)			<< "Move selected item(s) to cursor position\n";
-	*w << DisplayKeys(Key.MoveBefore)		<< "Move selected item(s) before cursor position\n";
-	*w << DisplayKeys(Key.MoveAfter)		<< "Move selected item(s) after cursor position\n";
-	*w << DisplayKeys(Key.Add)			<< "Add url/file/directory to playlist\n";
-#	ifdef HAVE_TAGLIB_H
-	*w << DisplayKeys(Key.EditTags)			<< "Edit song's tags\n";
-#	endif // HAVE_TAGLIB_H
-	*w << DisplayKeys(Key.SavePlaylist)		<< "Save playlist\n";
-	*w << DisplayKeys(Key.SortPlaylist)		<< "Sort/reverse playlist\n";
-	*w << DisplayKeys(Key.GoToNowPlaying)		<< "Go to currently playing position\n";
-	*w << DisplayKeys(Key.ToggleAutoCenter)		<< "Toggle auto center mode\n";
-	
-	
-	*w << "\n\n   " << fmtBold << "Keys - Browser\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << DisplayKeys(Key.Enter)			<< "Enter directory/Add item to playlist and play\n";
-	*w << DisplayKeys(Key.Space)			<< "Add item to playlist\n";
-#	ifdef HAVE_TAGLIB_H
-	*w << DisplayKeys(Key.EditTags)			<< "Edit song's tags/Rename playlist/directory\n";
-#	else
-	*w << DisplayKeys(Key.EditTags)			<< "Rename playlist/directory\n";
-#	endif // HAVE_TAGLIB_H
-	if (Mpd.GetHostname()[0] == '/') // are we connected to unix socket?
-		*w << DisplayKeys(Key.Browser)		<< "Browse MPD database/local filesystem\n";
-	*w << DisplayKeys(Key.SwitchTagTypeList)	<< "Toggle sort order\n";
-	*w << DisplayKeys(Key.GoToNowPlaying)		<< "Locate currently playing song\n";
-	*w << DisplayKeys(Key.GoToParentDir)		<< "Go to parent directory\n";
-	*w << DisplayKeys(Key.Delete)			<< "Delete playlist/file/directory\n";
-	*w << DisplayKeys(Key.GoToContainingDir)	<< "Jump to playlist editor (playlists only)\n";
-	
-	
-	*w << "\n\n   " << fmtBold << "Keys - Search engine\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << DisplayKeys(Key.Enter)			<< "Add item to playlist and play/change option\n";
-	*w << DisplayKeys(Key.Space)			<< "Add item to playlist\n";
-#	ifdef HAVE_TAGLIB_H
-	*w << DisplayKeys(Key.EditTags)			<< "Edit song's tags\n";
-#	endif // HAVE_TAGLIB_H
-	*w << DisplayKeys(Key.ToggleSingle)		<< "Start searching immediately\n";
-	*w << DisplayKeys(Key.SearchEngine)		<< "Reset search engine\n";
-	
-	
-	*w << "\n\n   " << fmtBold << "Keys - Media library\n -----------------------------------------\n" << fmtBoldEnd;
-	if (!Config.media_library_disable_two_column_mode)
-		*w << DisplayKeys(Key.MediaLibrary)	<< "Switch between two/three columns\n";
-	*w << DisplayKeys(Key.PrevColumn)		<< "Previous column\n";
-	*w << DisplayKeys(Key.NextColumn)		<< "Next column\n";
-	*w << DisplayKeys(Key.Enter)			<< "Add to playlist and play song/album/artist's songs\n";
-	*w << DisplayKeys(Key.Space)			<< "Add to playlist song/album/artist's songs\n";
-#	ifdef HAVE_TAGLIB_H
-	*w << DisplayKeys(Key.EditTags)			<< "Edit main tag/album/song's tags\n";
-#	endif // HAVE_TAGLIB_H
-	*w << DisplayKeys(Key.SwitchTagTypeList)	<< "Tag type list switcher (left column)\n";
-	
-	
-	*w << "\n\n   " << fmtBold << "Keys - Playlist Editor\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << DisplayKeys(Key.PrevColumn)		<< "Previous column\n";
-	*w << DisplayKeys(Key.NextColumn)		<< "Next column\n";
-	*w << DisplayKeys(Key.Enter)			<< "Add item to playlist and play\n";
-	*w << DisplayKeys(Key.Space)			<< "Add to playlist/select item\n";
-#	ifdef HAVE_TAGLIB_H
-	*w << DisplayKeys(Key.EditTags)			<< "Edit playlist's name/song's tags\n";
-#	else
-	*w << DisplayKeys(Key.EditTags)			<< "Edit playlist's name\n";
-#	endif // HAVE_TAGLIB_H
-	*w << DisplayKeys(Key.MvSongUp)			<< "Move item(s) up\n";
-	*w << DisplayKeys(Key.MvSongDown)		<< "Move item(s) down\n";
-	*w << DisplayKeys(Key.Clear)			<< "Clear current playlist\n";
-	
-	
-	*w << "\n\n   " << fmtBold << "Keys - Lyrics\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << DisplayKeys(Key.Space)			<< "Switch for following lyrics of now playing song\n";
-	*w << DisplayKeys(Key.EditTags)			<< "Open lyrics in external editor\n";
-	*w << DisplayKeys(Key.SwitchTagTypeList)	<< "Refetch lyrics\n";
-	
-	
-	*w << "\n\n   " << fmtBold << "Keys - Artist info\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << DisplayKeys(Key.SwitchTagTypeList)	<< "Refetch artist info\n";
-	
-	
-#	ifdef HAVE_TAGLIB_H
-	*w << "\n\n   " << fmtBold << "Keys - Tiny tag editor\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << DisplayKeys(Key.Enter)			<< "Edit tag\n";
-	*w << DisplayKeys(Key.ToggleSingle)		<< "Save\n";
-	
-	
-	*w << "\n\n   " << fmtBold << "Keys - Tag editor\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << DisplayKeys(Key.Enter)			<< "Change tag/filename for one song (left column)\n";
-	*w << DisplayKeys(Key.Enter)			<< "Perform operation on all/selected songs (middle column)\n";
-	*w << DisplayKeys(Key.Space)			<< "Switch to albums/directories view (left column)\n";
-	*w << DisplayKeys(Key.Space)			<< "Select/deselect song (right column)\n";
-	*w << DisplayKeys(Key.PrevColumn)		<< "Previous column\n";
-	*w << DisplayKeys(Key.NextColumn)		<< "Next column\n";
-	*w << DisplayKeys(Key.GoToParentDir)		<< "Go to parent directory (left column, directories view)\n";
-#	endif // HAVE_TAGLIB_H
-	
-	
-#	ifdef ENABLE_OUTPUTS
-	*w << "\n\n   " << fmtBold << "Keys - Outputs\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << DisplayKeys(Key.Enter)			<< "Enable/disable output\n";
-#	endif // ENABLE_OUTPUTS
-	
-	
-#	if defined(ENABLE_VISUALIZER) && defined(HAVE_FFTW3_H)
-	*w << "\n\n   " << fmtBold << "Keys - Music visualizer\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << DisplayKeys(Key.Space)			<< "Toggle visualization type\n";
-#	endif // ENABLE_VISUALIZER && HAVE_FFTW3_H
-	
-	
-	*w << "\n\n   " << fmtBold << "Mouse - Global\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << "\tLeft click on \"Playing/Paused\"	"	<< ": Play/pause\n";
-	*w << "\tLeft click on progressbar	"		<< ": Go to chosen position in played track\n";
-	*w << "\n";
-	*w << "\tMouse wheel on \"Volume: xx\"	"		<< ": Change volume\n";
-	*w << "\tMouse wheel on main window	"		<< ": Scroll\n";
-	
-	
-	*w << "\n\n   " << fmtBold << "Mouse - Playlist\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << "\tLeft click			"		<< ": Highlight\n";
-	*w << "\tRight click			"		<< ": Play\n";
-	
-	
-	*w << "\n\n   " << fmtBold << "Mouse - Browser\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << "\tLeft click on directory		"	<< ": Enter directory\n";
-	*w << "\tRight click on directory	"		<< ": Add to playlist\n";
-	*w << "\n";
-	*w << "\tLeft click on song/playlist	"		<< ": Add to playlist\n";
-	*w << "\tRight click on song/playlist	"		<< ": Add to playlist and play\n";
-	
-	
-	*w << "\n\n   " << fmtBold << "Mouse - Search engine\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << "\tLeft click			"		<< ": Highlight/switch value\n";
-	*w << "\tRight click			"		<< ": Change value\n";
-	
-	
-	*w << "\n\n   " << fmtBold << "Mouse - Media library\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << fmtBold << "\tLeft/middle column:\n" << fmtBoldEnd;
-	*w << "\t\tLeft Click		"			<< ": Highlight\n";
-	*w << "\t\tRight Click		"			<< ": Add to playlist\n";
-	*w << "\n";
-	*w << fmtBold << "\tRight column:\n" << fmtBoldEnd;
-	*w << "\t\tLeft Click		"			<< ": Add to playlist\n";
-	*w << "\t\tRight Click		"			<< ": Add to playlist and play\n";
-	
-	
-	*w << "\n\n   " << fmtBold << "Mouse - Playlist editor\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << fmtBold << "\tLeft column:\n" << fmtBoldEnd;
-	*w << "\t\tLeft Click		"			<< ": Highlight\n";
-	*w << "\t\tRight Click		"			<< ": Add to playlist\n";
-	*w << "\n";
-	*w << fmtBold << "\tRight column:\n" << fmtBoldEnd;
-	*w << "\t\tLeft Click		"			<< ": Add to playlist\n";
-	*w << "\t\tRight Click		"			<< ": Add to playlist and play\n";
-	
-	
-#	ifdef HAVE_TAGLIB_H
-	*w << "\n\n   " << fmtBold << "Mouse - Tiny tag editor\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << "\tLeft click			"		<< ": Highlight\n";
-	*w << "\tRight click			"		<< ": Change value/execute command\n";
-	
-	
-	*w << "\n\n   " << fmtBold << "Mouse - Tag editor\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << fmtBold << "\tLeft column:\n" << fmtBoldEnd;
-	*w << "\t\tLeft Click		"			<< ": Enter directory/highlight album\n";
-	*w << "\t\tRight Click		"			<< ": Switch to directories/albums view\n";
-	*w << "\n";
-	*w << fmtBold << "\tMiddle column:\n" << fmtBoldEnd;
-	*w << "\t\tLeft Click		"			<< ": Highlight\n";
-	*w << "\t\tRight Click		"			<< ": Change value/execute command\n";
-	*w << "\n";
-	*w << fmtBold << "\tRight column:\n" << fmtBoldEnd;
-	*w << "\t\tLeft Click		"			<< ": Highlight\n";
-	*w << "\t\tRight Click		"			<< ": Change value\n";
-#	endif // HAVE_TAGLIB_H
-	
-	
-#	ifdef ENABLE_OUTPUTS
-	*w << "\n\n   " << fmtBold << "Mouse - Outputs\n -----------------------------------------\n" << fmtBoldEnd;
-	*w << "\tLeft click			"		<< ": Highlight\n";
-	*w << "\tRight click			"		<< ": Enable/disable output\n";
-#	endif // ENABLE_OUTPUTS
+	result.resize(16, ' ');
+	return result;
 }
 
+void section(NC::Scrollpad &w, const char *type_, const char *title_)
+{
+	w << "\n  " << NC::Format::Bold << type_ << " - ";
+	w << title_ << NC::Format::NoBold << "\n\n";
+}
+
+/**********************************************************************/
+
+void key_section(NC::Scrollpad &w, const char *title_)
+{
+	section(w, "Keys", title_);
+}
+
+void key(NC::Scrollpad &w, const Actions::Type at, const char *desc)
+{
+	w << "    " << display_keys(at) << " : " << desc << '\n';
+}
+
+void key(NC::Scrollpad &w, const Actions::Type at, const boost::format &desc)
+{
+	w << "    " << display_keys(at) << " : " << desc.str() << '\n';
+}
+
+/**********************************************************************/
+
+void mouse_section(NC::Scrollpad &w, const char *title_)
+{
+	section(w, "Mouse", title_);
+}
+
+void mouse(NC::Scrollpad &w, std::string action, const char *desc, bool indent = false)
+{
+	action.resize(31 - (indent ? 2 : 0), ' ');
+	w << "    " << (indent ? "  " : "") << action;
+	w << ": " << desc << '\n';
+}
+
+void mouse_column(NC::Scrollpad &w, const char *column)
+{
+	w << NC::Format::Bold << "    " << column << " column:\n" << NC::Format::NoBold;
+}
+
+/**********************************************************************/
+
+void write_bindings(NC::Scrollpad &w)
+{
+	using Actions::Type;
+
+	key_section(w, "Movement");
+	key(w, Type::ScrollUp, "Move cursor up");
+	key(w, Type::ScrollDown, "Move cursor down");
+	key(w, Type::ScrollUpAlbum, "Move cursor up one album");
+	key(w, Type::ScrollDownAlbum, "Move cursor down one album");
+	key(w, Type::ScrollUpArtist, "Move cursor up one artist");
+	key(w, Type::ScrollDownArtist, "Move cursor down one artist");
+	key(w, Type::PageUp, "Page up");
+	key(w, Type::PageDown, "Page down");
+	key(w, Type::MoveHome, "Home");
+	key(w, Type::MoveEnd, "End");
+	w << '\n';
+	if (Config.screen_switcher_previous)
+	{
+		key(w, Type::NextScreen, "Switch between current and last screen");
+		key(w, Type::PreviousScreen, "Switch between current and last screen");
+	}
+	else
+	{
+		key(w, Type::NextScreen, "Switch to next screen in sequence");
+		key(w, Type::PreviousScreen, "Switch to previous screen in sequence");
+	}
+	key(w, Type::ShowHelp, "Show help");
+	key(w, Type::ShowPlaylist, "Show playlist");
+	key(w, Type::ShowBrowser, "Show browser");
+	key(w, Type::ShowSearchEngine, "Show search engine");
+	key(w, Type::ShowMediaLibrary, "Show media library");
+	key(w, Type::ShowPlaylistEditor, "Show playlist editor");
+#	ifdef HAVE_TAGLIB_H
+	key(w, Type::ShowTagEditor, "Show tag editor");
+#	endif // HAVE_TAGLIB_H
+#	ifdef ENABLE_OUTPUTS
+	key(w, Type::ShowOutputs, "Show outputs");
+#	endif // ENABLE_OUTPUTS
+#	ifdef ENABLE_VISUALIZER
+	key(w, Type::ShowVisualizer, "Show music visualizer");
+#	endif // ENABLE_VISUALIZER
+#	ifdef ENABLE_CLOCK
+	key(w, Type::ShowClock, "Show clock");
+#	endif // ENABLE_CLOCK
+	w << '\n';
+	key(w, Type::ShowServerInfo, "Show server info");
+
+	key_section(w, "Global");
+	key(w, Type::Stop, "Stop");
+	key(w, Type::Pause, "Pause");
+	key(w, Type::Next, "Next track");
+	key(w, Type::Previous, "Previous track");
+	key(w, Type::ReplaySong, "Replay playing song");
+	key(w, Type::SeekForward, "Seek forward in playing song");
+	key(w, Type::SeekBackward, "Seek backward in playing song");
+	key(w, Type::VolumeDown,
+		boost::format("Decrease volume by %1%%%") % Config.volume_change_step
+	);
+	key(w, Type::VolumeUp,
+		boost::format("Increase volume by %1%%%") % Config.volume_change_step
+	);
+	w << '\n';
+	key(w, Type::ToggleSpaceMode, "Toggle space mode (select/add)");
+	key(w, Type::ToggleAddMode, "Toggle add mode (add or remove/always add)");
+	key(w, Type::ToggleMouse, "Toggle mouse support");
+	key(w, Type::ReverseSelection, "Reverse selection");
+	key(w, Type::RemoveSelection, "Remove selection");
+	key(w, Type::SelectAlbum, "Select songs of album around the cursor");
+	key(w, Type::AddSelectedItems, "Add selected items to playlist");
+	key(w, Type::AddRandomItems, "Add random items to playlist");
+	w << '\n';
+	key(w, Type::ToggleRepeat, "Toggle repeat mode");
+	key(w, Type::ToggleRandom, "Toggle random mode");
+	key(w, Type::ToggleSingle, "Toggle single mode");
+	key(w, Type::ToggleConsume, "Toggle consume mode");
+	key(w, Type::ToggleReplayGainMode, "Toggle replay gain mode");
+	key(w, Type::ToggleBitrateVisibility, "Toggle bitrate visibility");
+	key(w, Type::Shuffle, "Shuffle playlist");
+	key(w, Type::ToggleCrossfade, "Toggle crossfade mode");
+	key(w, Type::SetCrossfade, "Set crossfade");
+	key(w, Type::SetVolume, "Set volume");
+	key(w, Type::UpdateDatabase, "Start music database update");
+	w << '\n';
+	key(w, Type::ExecuteCommand, "Execute command");
+	key(w, Type::ApplyFilter, "Apply filter");
+	key(w, Type::FindItemForward, "Find item forward");
+	key(w, Type::FindItemBackward, "Find item backward");
+	key(w, Type::PreviousFoundItem, "Jump to previous found item");
+	key(w, Type::NextFoundItem, "Jump to next found item");
+	key(w, Type::ToggleFindMode, "Toggle find mode (normal/wrapped)");
+	key(w, Type::JumpToBrowser, "Locate song in browser");
+	key(w, Type::JumpToMediaLibrary, "Locate song in media library");
+	key(w, Type::ToggleScreenLock, "Lock/unlock current screen");
+	key(w, Type::MasterScreen, "Switch to master screen (left one)");
+	key(w, Type::SlaveScreen, "Switch to slave screen (right one)");
+#	ifdef HAVE_TAGLIB_H
+	key(w, Type::JumpToTagEditor, "Locate song in tag editor");
+#	endif // HAVE_TAGLIB_H
+	key(w, Type::ToggleDisplayMode, "Toggle display mode");
+	key(w, Type::ToggleInterface, "Toggle user interface");
+	key(w, Type::ToggleSeparatorsBetweenAlbums, "Toggle displaying separators between albums");
+	key(w, Type::JumpToPositionInSong, "Jump to given position in playing song (formats: mm:ss, x%)");
+	key(w, Type::ShowSongInfo, "Show song info");
+#	ifdef HAVE_CURL_CURL_H
+	key(w, Type::ShowArtistInfo, "Show artist info");
+	key(w, Type::ToggleLyricsFetcher, "Toggle lyrics fetcher");
+	key(w, Type::ToggleFetchingLyricsInBackground, "Toggle fetching lyrics for playing songs in background");
+#	endif // HAVE_CURL_CURL_H
+	key(w, Type::ShowLyrics, "Show/hide song lyrics");
+	w << '\n';
+	key(w, Type::Quit, "Quit");
+
+	key_section(w, "Playlist");
+	key(w, Type::PressEnter, "Play selected item");
+	key(w, Type::DeletePlaylistItems, "Delete selected item(s) from playlist");
+	key(w, Type::ClearMainPlaylist, "Clear playlist");
+	key(w, Type::CropMainPlaylist, "Clear playlist except selected item(s)");
+	key(w, Type::SetSelectedItemsPriority, "Set priority of selected items");
+	key(w, Type::MoveSelectedItemsUp, "Move selected item(s) up");
+	key(w, Type::MoveSelectedItemsDown, "Move selected item(s) down");
+	key(w, Type::MoveSelectedItemsTo, "Move selected item(s) to cursor position");
+	key(w, Type::Add, "Add item to playlist");
+#	ifdef HAVE_TAGLIB_H
+	key(w, Type::EditSong, "Edit song");
+#	endif // HAVE_TAGLIB_H
+	key(w, Type::SavePlaylist, "Save playlist");
+	key(w, Type::SortPlaylist, "Sort playlist");
+	key(w, Type::ReversePlaylist, "Reverse playlist");
+	key(w, Type::FilterPlaylistOnPriorities, "Filter playlist on priorities");
+	key(w, Type::JumpToPlayingSong, "Jump to current song");
+	key(w, Type::TogglePlayingSongCentering, "Toggle playing song centering");
+
+	key_section(w, "Browser");
+	key(w, Type::PressEnter, "Enter directory/Add item to playlist and play it");
+	key(w, Type::PressSpace, "Add item to playlist/select it");
+#	ifdef HAVE_TAGLIB_H
+	key(w, Type::EditSong, "Edit song");
+#	endif // HAVE_TAGLIB_H
+	key(w, Type::EditDirectoryName, "Edit directory name");
+	key(w, Type::EditPlaylistName, "Edit playlist name");
+	key(w, Type::ChangeBrowseMode, "Browse MPD database/local filesystem");
+	key(w, Type::ToggleBrowserSortMode, "Toggle sort mode");
+	key(w, Type::JumpToPlayingSong, "Locate playing song");
+	key(w, Type::JumpToParentDirectory, "Jump to parent directory");
+	key(w, Type::DeleteBrowserItems, "Delete selected items from disk");
+	key(w, Type::JumpToPlaylistEditor, "Jump to playlist editor (playlists only)");
+
+	key_section(w, "Search engine");
+	key(w, Type::PressEnter, "Add item to playlist and play it/change option");
+	key(w, Type::PressSpace, "Add item to playlist");
+#	ifdef HAVE_TAGLIB_H
+	key(w, Type::EditSong, "Edit song");
+#	endif // HAVE_TAGLIB_H
+	key(w, Type::StartSearching, "Start searching");
+	key(w, Type::ResetSearchEngine, "Reset search constraints and clear results");
+
+	key_section(w, "Media library");
+	key(w, Type::ToggleMediaLibraryColumnsMode, "Switch between two/three columns mode");
+	key(w, Type::PreviousColumn, "Previous column");
+	key(w, Type::NextColumn, "Next column");
+	key(w, Type::PressEnter, "Add item to playlist and play it");
+	key(w, Type::PressSpace, "Add item to playlist");
+#	ifdef HAVE_TAGLIB_H
+	key(w, Type::EditSong, "Edit song");
+#	endif // HAVE_TAGLIB_H
+	key(w, Type::EditLibraryTag, "Edit tag (left column)/album (middle/right column)");
+	key(w, Type::ToggleLibraryTagType, "Toggle type of tag used in left column");
+	key(w, Type::ToggleMediaLibrarySortMode, "Toggle sort mode");
+
+	key_section(w, "Playlist editor");
+	key(w, Type::PreviousColumn, "Previous column");
+	key(w, Type::NextColumn, "Next column");
+	key(w, Type::PressEnter, "Add item to playlist and play it");
+	key(w, Type::PressSpace, "Add item to playlist/select it");
+#	ifdef HAVE_TAGLIB_H
+	key(w, Type::EditSong, "Edit song");
+#	endif // HAVE_TAGLIB_H
+	key(w, Type::EditPlaylistName, "Edit playlist name");
+	key(w, Type::MoveSelectedItemsUp, "Move selected item(s) up");
+	key(w, Type::MoveSelectedItemsDown, "Move selected item(s) down");
+	key(w, Type::DeleteStoredPlaylist, "Delete selected playlists (left column)");
+	key(w, Type::DeletePlaylistItems, "Delete selected item(s) from playlist (right column)");
+	key(w, Type::ClearPlaylist, "Clear playlist");
+	key(w, Type::CropPlaylist, "Clear playlist except selected items");
+
+	key_section(w, "Lyrics");
+	key(w, Type::PressSpace, "Toggle reloading lyrics upon song change");
+	key(w, Type::EditLyrics, "Open lyrics in external editor");
+	key(w, Type::RefetchLyrics, "Refetch lyrics");
+
+#	ifdef HAVE_TAGLIB_H
+	key_section(w, "Tiny tag editor");
+	key(w, Type::PressEnter, "Edit tag");
+	key(w, Type::SaveTagChanges, "Save");
+
+	key_section(w, "Tag editor");
+	key(w, Type::PressEnter, "Edit tag/filename of selected item (left column)");
+	key(w, Type::PressEnter, "Perform operation on all/selected items (middle column)");
+	key(w, Type::PressSpace, "Switch to albums/directories view (left column)");
+	key(w, Type::PressSpace, "Select item (right column)");
+	key(w, Type::PreviousColumn, "Previous column");
+	key(w, Type::NextColumn, "Next column");
+	key(w, Type::JumpToParentDirectory, "Jump to parent directory (left column, directories view)");
+#	endif // HAVE_TAGLIB_H
+
+#	ifdef ENABLE_OUTPUTS
+	key_section(w, "Outputs");
+	key(w, Type::PressEnter, "Toggle output");
+#	endif // ENABLE_OUTPUTS
+
+#	if defined(ENABLE_VISUALIZER) && defined(HAVE_FFTW3_H)
+	key_section(w, "Music visualizer");
+	key(w, Type::PressSpace, "Toggle visualization type");
+	key(w, Type::SetVisualizerSampleMultiplier, "Set visualizer sample multiplier");
+#	endif // ENABLE_VISUALIZER && HAVE_FFTW3_H
+
+	mouse_section(w, "Global");
+	mouse(w, "Left click on \"Playing/Paused\"", "Play/pause");
+	mouse(w, "Left click on progressbar", "Jump to pointed position in playing song");
+	w << '\n';
+	mouse(w, "Mouse wheel on \"Volume: xx\"", "Play/pause");
+	mouse(w, "Mouse wheel on main window", "Scroll");
+
+	mouse_section(w, "Playlist");
+	mouse(w, "Left click", "Select pointed item");
+	mouse(w, "Right click", "Play");
+
+	mouse_section(w, "Browser");
+	mouse(w, "Left click on directory", "Enter pointed directory");
+	mouse(w, "Right click on directory", "Add pointed directory to playlist");
+	w << '\n';
+	mouse(w, "Left click on song/playlist", "Add pointed item to playlist");
+	mouse(w, "Right click on song/playlist", "Add pointed item to playlist and play it");
+
+	mouse_section(w, "Search engine");
+	mouse(w, "Left click", "Highlight/switch value");
+	mouse(w, "Right click", "Change value");
+
+	mouse_section(w, "Media library");
+	mouse_column(w, "Left/middle");
+	mouse(w, "Left click", "Select pointed item", true);
+	mouse(w, "Right click", "Add item to playlist", true);
+	w << '\n';
+	mouse_column(w, "Right");
+	mouse(w, "Left Click", "Add pointed item to playlist", true);
+	mouse(w, "Right Click", "Add pointed item to playlist and play it", true);
+
+	mouse_section(w, "Playlist editor");
+	mouse_column(w, "Left");
+	mouse(w, "Left click", "Select pointed item", true);
+	mouse(w, "Right click", "Add item to playlist", true);
+	w << '\n';
+	mouse_column(w, "Right");
+	mouse(w, "Left click", "Add pointed item to playlist", true);
+	mouse(w, "Right click", "Add pointed item to playlist and play it", true);
+
+#	ifdef HAVE_TAGLIB_H
+	mouse_section(w, "Tiny tag editor");
+	mouse(w, "Left click", "Select option");
+	mouse(w, "Right click", "Set value/execute");
+
+	mouse_section(w, "Tag editor");
+	mouse_column(w, "Left");
+	mouse(w, "Left click", "Enter pointed directory/select pointed album", true);
+	mouse(w, "Right click", "Toggle view (directories/albums)", true);
+	w << '\n';
+	mouse_column(w, "Middle");
+	mouse(w, "Left click", "Select option", true);
+	mouse(w, "Right click", "Set value/execute", true);
+	w << '\n';
+	mouse_column(w, "Right");
+	mouse(w, "Left click", "Select pointed item", true);
+	mouse(w, "Right click", "Set value", true);
+#	endif // HAVE_TAGLIB_H
+
+#	ifdef ENABLE_OUTPUTS
+	mouse_section(w, "Outputs");
+	mouse(w, "Left click", "Select pointed output");
+	mouse(w, "Right click", "Toggle output");
+#	endif // ENABLE_OUTPUTS
+
+}
+
+}
+
+Help::Help()
+: Screen(NC::Scrollpad(0, MainStartY, COLS, MainHeight, "", Config.main_color, NC::Border::None))
+{
+	write_bindings(w);
+	w.flush();
+}
+
+void Help::resize()
+{
+	size_t x_offset, width;
+	getWindowResizeParams(x_offset, width);
+	w.resize(width, MainHeight);
+	w.moveTo(x_offset, MainStartY);
+	hasToBeResized = 0;
+}
+
+void Help::switchTo()
+{
+	SwitchTo::execute(this);
+	drawHeader();
+}
+
+std::wstring Help::title()
+{
+	return L"Help";
+}

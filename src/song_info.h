@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,47 +18,49 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _SONG_INFO_H
-#define _SONG_INFO_H
+#ifndef NCMPCPP_SONG_INFO_H
+#define NCMPCPP_SONG_INFO_H
 
+#include "interfaces.h"
+#include "mutable_song.h"
 #include "screen.h"
-#include "song.h"
 
-class SongInfo : public Screen<Scrollpad>
+struct SongInfo: Screen<NC::Scrollpad>, Tabbable
 {
-	public:
-		struct Metadata
-		{
-			const char *Name;
-			MPD::Song::GetFunction Get;
-			MPD::Song::SetFunction Set;
-		};
-		
-		virtual void SwitchTo();
-		virtual void Resize();
-		
-		virtual std::basic_string<my_char_t> Title();
-		
-		virtual void EnterPressed() { }
-		virtual void SpacePressed() { }
-		
-		virtual bool allowsSelection() { return false; }
-		
-		virtual List *GetList() { return 0; }
-		
-		virtual bool isMergable() { return true; }
-		
-		static const Metadata Tags[];
-		
-	protected:
-		virtual void Init();
-		virtual bool isLockable() { return false; }
-		
-	private:
-		void PrepareSong(MPD::Song &);
+	struct Metadata
+	{
+		const char *Name;
+		MPD::Song::GetFunction Get;
+		MPD::MutableSong::SetFunction Set;
+	};
+	
+	SongInfo();
+	
+	// Screen<NC::Scrollpad> implementation
+	virtual void switchTo() OVERRIDE;
+	virtual void resize() OVERRIDE;
+	
+	virtual std::wstring title() OVERRIDE;
+	virtual ScreenType type() OVERRIDE { return ScreenType::SongInfo; }
+	
+	virtual void update() OVERRIDE { }
+	
+	virtual void enterPressed() OVERRIDE { }
+	virtual void spacePressed() OVERRIDE { }
+	
+	virtual bool isMergable() OVERRIDE { return true; }
+	
+	// private members
+	static const Metadata Tags[];
+	
+protected:
+	virtual bool isLockable() OVERRIDE { return false; }
+	
+private:
+	void PrepareSong(MPD::Song &);
 };
 
 extern SongInfo *mySongInfo;
 
-#endif
+#endif // NCMPCPP_SONG_INFO_H
 

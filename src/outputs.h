@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,48 +18,47 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _OUTPUTS_H
-#define _OUTPUTS_H
+#ifndef NCMPCPP_OUTPUTS_H
+#define NCMPCPP_OUTPUTS_H
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
+#include "config.h"
 
 #ifdef ENABLE_OUTPUTS
 
+#include "interfaces.h"
 #include "menu.h"
 #include "mpdpp.h"
 #include "screen.h"
 
-class Outputs : public Screen< Menu<MPD::Output> >
+struct Outputs: Screen<NC::Menu<MPD::Output>>, Tabbable
 {
-	public:
-		virtual void SwitchTo();
-		virtual void Resize();
-		
-		virtual std::basic_string<my_char_t> Title();
-		
-		virtual void EnterPressed();
-		virtual void SpacePressed() { }
-		virtual void MouseButtonPressed(MEVENT);
-		virtual bool isTabbable() { return true; }
-		
-		virtual bool allowsSelection() { return false; }
-		
-		virtual List *GetList() { return w; }
-		
-		virtual bool isMergable() { return true; }
-		
-		void FetchList();
-		
-	protected:
-		virtual void Init();
-		virtual bool isLockable() { return true; }
+	Outputs();
+	
+	// Screen< NC::Menu<MPD::Output> > implementation
+	virtual void switchTo() OVERRIDE;
+	virtual void resize() OVERRIDE;
+	
+	virtual std::wstring title() OVERRIDE;
+	virtual ScreenType type() OVERRIDE { return ScreenType::Outputs; }
+	
+	virtual void update() OVERRIDE { }
+	
+	virtual void enterPressed() OVERRIDE;
+	virtual void spacePressed() OVERRIDE { }
+	virtual void mouseButtonPressed(MEVENT me) OVERRIDE;
+	
+	virtual bool isMergable() OVERRIDE { return true; }
+	
+	// private members
+	void FetchList();
+	
+protected:
+	virtual bool isLockable() OVERRIDE { return true; }
 };
 
 extern Outputs *myOutputs;
 
 #endif // ENABLE_OUTPUTS
 
-#endif
+#endif // NCMPCPP_OUTPUTS_H
 

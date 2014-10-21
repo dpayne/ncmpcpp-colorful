@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,20 +18,66 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#include "menu.h"
+#ifndef NCMPCPP_MACRO_UTILITIES_H
+#define NCMPCPP_MACRO_UTILITIES_H
 
-using namespace NCurses;
+#include <cassert>
+#include "actions.h"
+#include "screen_type.h"
 
-template <> std::string Menu<std::string>::GetOption(size_t pos)
+namespace Actions {//
+
+struct PushCharacters : public BaseAction
 {
-	if (itsOptionsPtr->at(pos))
-	{
-		if (itsGetStringFunction)
-			return itsGetStringFunction((*itsOptionsPtr)[pos]->Item, itsGetStringFunctionUserData);
-		else
-			return (*itsOptionsPtr)[pos]->Item;
-	}
-	else
-		return "";
+	PushCharacters(NC::Window **w, std::vector<int> &&queue)
+	: BaseAction(Type::MacroUtility, ""), m_window(w), m_queue(queue) { }
+	
+protected:
+	virtual void run();
+	
+private:
+	NC::Window **m_window;
+	std::vector<int> m_queue;
+};
+
+struct RequireRunnable : public BaseAction
+{
+	RequireRunnable(BaseAction *action)
+	: BaseAction(Type::MacroUtility, ""), m_action(action) { assert(action); }
+	
+protected:
+	virtual bool canBeRun() const;
+	virtual void run() { }
+	
+private:
+	BaseAction *m_action;
+};
+
+struct RequireScreen : public BaseAction
+{
+	RequireScreen(ScreenType screen_type)
+	: BaseAction(Type::MacroUtility, ""), m_screen_type(screen_type) { }
+	
+protected:
+	virtual bool canBeRun() const;
+	virtual void run() { }
+	
+private:
+	ScreenType m_screen_type;
+};
+
+struct RunExternalCommand : public BaseAction
+{
+	RunExternalCommand(std::string command)
+	: BaseAction(Type::MacroUtility, ""), m_command(command) { }
+	
+protected:
+	virtual void run();
+	
+private:
+	std::string m_command;
+};
+
 }
 
+#endif // NCMPCPP_MACRO_UTILITIES_H

@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,18 +18,24 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#include <algorithm>
-#include <wctype.h>
+#include "global.h"
 
-#include "tolower.h"
+namespace Global {//
 
-void ToLower(std::string &s)
-{
-	transform(s.begin(), s.end(), s.begin(), tolower);
+BaseScreen *myScreen;
+BaseScreen *myLockedScreen;
+BaseScreen *myInactiveScreen;
+
+NC::Window *wHeader;
+NC::Window *wFooter;
+
+size_t MainStartY;
+size_t MainHeight;
+
+bool ShowMessages = false;
+bool SeekingInProgress = false;
+
+std::string VolumeState;
+boost::posix_time::ptime Timer;
+
 }
-
-void ToLower(std::wstring &s)
-{
-	transform(s.begin(), s.end(), s.begin(), towlower);
-}
-

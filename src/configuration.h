@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,18 +18,11 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _NCMPCPP_H
-#define _NCMPCPP_H
+#ifndef NCMPCPP_CONFIGURATION_H
+#define NCMPCPP_CONFIGURATION_H
 
-#include "window.h"
-#include "menu.h"
-#include "scrollpad.h"
+void expand_home(std::string &path);
 
-using namespace NCurses;
+bool configure(int argc, char **argv);
 
-typedef std::pair<std::string, std::string> string_pair;
-
-const int ncmpcpp_window_timeout = 500;
-
-#endif
-
+#endif // NCMPCPP_CONFIGURATION_H

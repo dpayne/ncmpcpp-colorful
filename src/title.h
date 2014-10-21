@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,13 +18,13 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef HAVE_TOLOWER_H
-#define HAVE_TOLOWER_H
+#ifndef NCMPCPP_TITLE_H
+#define NCMPCPP_TITLE_H
 
-#include <string>
+#include "window.h"
 
-void ToLower(std::string &);
-void ToLower(std::wstring &);
+void windowTitle(const std::string &title);
 
-#endif
+void drawHeader();
 
+#endif // NCMPCPP_TITLE_H

@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,44 +18,29 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _DISPLAY_H
-#define _DISPLAY_H
+#ifndef NCMPCPP_DISPLAY_H
+#define NCMPCPP_DISPLAY_H
 
-#include "ncmpcpp.h"
+#include "interfaces.h"
 #include "menu.h"
-#include "mpdpp.h"
-#include "screen.h"
+#include "mutable_song.h"
+#include "search_engine.h"
 
-namespace Display
-{
-	struct ScreenFormat
-	{
-		BasicScreen *screen;
-		std::string *format;
-	};
-	
-	std::string Columns(size_t);
-	
-	template <typename T> void Generic(const T &t, void *, Menu<T> *menu)
-	{
-		*menu << t;
-	}
-	
-	template <typename A, typename B> void Pairs(const std::pair<A, B> &pair, void *, Menu< std::pair<A, B> > *menu)
-	{
-		*menu << pair.first;
-	}
-	
-	void SongsInColumns(const MPD::Song &, void *, Menu<MPD::Song> *);
-	
-	void Songs(const MPD::Song &, void *, Menu<MPD::Song> *);
-	
-	void Tags(const MPD::Song &, void *, Menu<MPD::Song> *);
-	
-	void SearchEngine(const std::pair<Buffer *, MPD::Song *> &, void *, Menu< std::pair<Buffer *, MPD::Song *> > *);
-	
-	void Items(const MPD::Item &, void *, Menu<MPD::Item> *);
+namespace Display {//
+
+std::string Columns(size_t);
+
+void SongsInColumns(NC::Menu<MPD::Song> &menu, const ProxySongList &pl);
+
+void Songs(NC::Menu<MPD::Song> &menu, const ProxySongList &pl, const std::string &format);
+
+void Tags(NC::Menu<MPD::MutableSong> &menu);
+
+void SEItems(NC::Menu<SEItem> &menu, const ProxySongList &pl);
+
+void Items(NC::Menu<MPD::Item> &menu, const ProxySongList &pl);
+
 }
 
-#endif
+#endif // NCMPCPP_DISPLAY_H
 

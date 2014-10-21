@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,51 +18,69 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _SEL_ITEMS_ADDER_H
-#define _SEL_ITEMS_ADDER_H
+#ifndef NCMPCPP_SEL_ITEMS_ADDER_H
+#define NCMPCPP_SEL_ITEMS_ADDER_H
 
-#include "ncmpcpp.h"
+#include "runnable_item.h"
+#include "interfaces.h"
 #include "screen.h"
+#include "song.h"
 
-class SelectedItemsAdder : public Screen< Menu<std::string> >
+struct SelectedItemsAdder: Screen<NC::Menu<RunnableItem<std::string, void()>> *>, Tabbable
 {
-	public:
-		SelectedItemsAdder() : itsPSWidth(35), itsPSHeight(11) { }
-		
-		virtual void SwitchTo();
-		virtual void Resize();
-		virtual void Refresh();
-		
-		virtual std::basic_string<my_char_t> Title();
-		
-		virtual void EnterPressed();
-		virtual void SpacePressed() { }
-		virtual void MouseButtonPressed(MEVENT);
-		
-		virtual bool allowsSelection() { return false; }
-		
-		virtual List *GetList() { return w; }
-		
-		virtual bool isMergable() { return false; }
-		
-	protected:
-		virtual void Init();
-		virtual bool isLockable() { return false; }
-		
-	private:
-		void SetDimensions();
-		
-		Menu<std::string> *itsPlaylistSelector;
-		Menu<std::string> *itsPositionSelector;
-		
-		size_t itsPSWidth;
-		size_t itsPSHeight;
-		
-		size_t itsWidth;
-		size_t itsHeight;
+	typedef SelectedItemsAdder Self;
+	typedef typename std::remove_pointer<WindowType>::type Component;
+	typedef Component::Item::Type Entry;
+	
+	SelectedItemsAdder();
+	
+	virtual void switchTo() OVERRIDE;
+	virtual void resize() OVERRIDE;
+	virtual void refresh() OVERRIDE;
+	
+	virtual std::wstring title() OVERRIDE;
+	virtual ScreenType type() OVERRIDE { return ScreenType::SelectedItemsAdder; }
+	
+	virtual void update() OVERRIDE { }
+	
+	virtual void enterPressed() OVERRIDE;
+	virtual void spacePressed() OVERRIDE { }
+	virtual void mouseButtonPressed(MEVENT me) OVERRIDE;
+	
+	virtual bool isMergable() OVERRIDE { return false; }
+	
+protected:
+	virtual bool isLockable() OVERRIDE { return false; }
+	
+private:
+	void populatePlaylistSelector(BaseScreen *screen);
+	
+	void addToCurrentPlaylist();
+	void addToNewPlaylist() const;
+	void addToExistingPlaylist(const std::string &playlist) const;
+	void addAtTheEndOfPlaylist() const;
+	void addAtTheBeginningOfPlaylist() const;
+	void addAfterCurrentSong() const;
+	void addAfterCurrentAlbum() const;
+	void addAfterHighlightedSong() const;
+	void cancel();
+	void exitSuccessfully(bool success) const;
+	
+	void setDimensions();
+	
+	size_t m_playlist_selector_width;
+	size_t m_playlist_selector_height;
+	
+	size_t m_position_selector_width;
+	size_t m_position_selector_height;
+	
+	Component m_playlist_selector;
+	Component m_position_selector;
+	
+	MPD::SongList m_selected_items;
 };
 
 extern SelectedItemsAdder *mySelectedItemsAdder;
 
-#endif
+#endif // NCMPCPP_SEL_ITEMS_ADDER_H
 

@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,78 +18,72 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _H_LASTFM
-#define _H_LASTFM
+#ifndef NCMPCPP_LASTFM_H
+#define NCMPCPP_LASTFM_H
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
+#include "config.h"
 
 #ifdef HAVE_CURL_CURL_H
 
 #include <memory>
-#include <pthread.h>
+#include <boost/thread/future.hpp>
 
+#include "interfaces.h"
 #include "lastfm_service.h"
 #include "screen.h"
+#include "utility/wide_string.h"
 
-class Lastfm : public Screen<Scrollpad>
+struct Lastfm: Screen<NC::Scrollpad>, Tabbable
 {
-	public:
-		Lastfm() : isReadyToTake(0), isDownloadInProgress(0) { }
+	Lastfm();
+	
+	virtual void switchTo() OVERRIDE;
+	virtual void resize() OVERRIDE;
+	
+	virtual std::wstring title() OVERRIDE;
+	virtual ScreenType type() OVERRIDE { return ScreenType::Lastfm; }
+	
+	virtual void update() OVERRIDE;
+	
+	virtual void enterPressed() OVERRIDE { }
+	virtual void spacePressed() OVERRIDE { }
+	
+	virtual bool isMergable() OVERRIDE { return true; }
+	
+	template <typename ServiceT>
+	void queueJob(ServiceT &&service)
+	{
+		typedef typename std::remove_reference<ServiceT>::type ServiceNoRef;
 		
-		virtual void SwitchTo();
-		virtual void Resize();
+		auto old_service = dynamic_cast<ServiceNoRef *>(m_service.get());
+		// if the same service and arguments were used, leave old info
+		if (old_service != nullptr && *old_service == service)
+			return;
 		
-		virtual std::basic_string<my_char_t> Title();
+		m_service = std::make_shared<ServiceNoRef>(std::forward<ServiceT>(service));
+		m_worker = boost::async(boost::launch::async, boost::bind(&LastFm::Service::fetch, m_service.get()));
 		
-		virtual void Update();
-		
-		virtual void EnterPressed() { }
-		virtual void SpacePressed() { }
-		
-		virtual bool allowsSelection() { return false; }
-		
-		virtual List *GetList() { return 0; }
-		
-		virtual bool isMergable() { return true; }
-		
-		void Refetch();
-		
-		bool isDownloading() { return isDownloadInProgress && !isReadyToTake; }
-		bool SetArtistInfoArgs(const std::string &artist, const std::string &lang = "");
-		
-	protected:
-		virtual void Init();
-		virtual bool isLockable() { return false; }
-		
-	private:
-		std::basic_string<my_char_t> itsTitle;
-		
-		std::string itsArtist;
-		std::string itsFilename;
-		
-		std::string itsFolder;
-		
-		std::auto_ptr<LastfmService> itsService;
-		LastfmService::Args itsArgs;
-		
-		void Load();
-		void Save(const std::string &data);
-		void SetTitleAndFolder();
-		
-		void Download();
-		static void *DownloadWrapper(void *);
-		
-		void Take();
-		bool isReadyToTake;
-		bool isDownloadInProgress;
-		pthread_t itsDownloader;
+		w.clear();
+		w << "Fetching information...";
+		w.flush();
+		m_title = ToWString(m_service->name());
+	}
+	
+protected:
+	virtual bool isLockable() OVERRIDE { return false; }
+	
+private:
+	void getResult();
+	
+	std::wstring m_title;
+	
+	std::shared_ptr<LastFm::Service> m_service;
+	boost::future<LastFm::Service::Result> m_worker;
 };
 
 extern Lastfm *myLastfm;
 
 #endif // HAVE_CURL_CURL_H
 
-#endif
+#endif // NCMPCPP_LASTFM_H
 

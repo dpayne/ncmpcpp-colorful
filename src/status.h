@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,35 +18,55 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _STATUS_CHECKER_H
-#define _STATUS_CHECKER_H
+#ifndef NCMPCPP_STATUS_CHECKER_H
+#define NCMPCPP_STATUS_CHECKER_H
 
+#include "interfaces.h"
 #include "mpdpp.h"
-#include "ncmpcpp.h"
 
-#ifndef USE_PDCURSES
- void WindowTitle(const std::string &);
-#else
-# define WindowTitle(x);
-#endif // USE_PDCURSES
+namespace Status {//
 
-void LockProgressbar();
-void UnlockProgressbar();
+void handleClientError(MPD::ClientError &e);
+void handleServerError(MPD::ServerError &e);
 
-void LockStatusbar();
-void UnlockStatusbar();
+void trace(bool update_timer, bool update_window_timeout);
+inline void trace() { trace(true, false); }
+void update(int event);
+void clear();
 
-void TraceMpdStatus();
-void NcmpcppStatusChanged(MPD::Connection *, MPD::StatusChanges, void *);
-void NcmpcppErrorCallback(MPD::Connection *, int, const char *, void *);
+namespace State {
 
-Window &Statusbar();
-void DrawProgressbar(unsigned elapsed, unsigned time);
-void ShowMessage(const char *, ...) GNUC_PRINTF(1, 2);
+// flags
+bool consume();
+bool crossfade();
+bool repeat();
+bool random();
+bool single();
 
-void StatusbarMPDCallback();
-void StatusbarGetStringHelper(const std::wstring &);
-void StatusbarApplyFilterImmediately(const std::wstring &);
+// misc
+int currentSongID();
+int currentSongPosition();
+unsigned elapsedTime();
+MPD::PlayerState player();
+unsigned totalTime();
+int volume();
 
-#endif
+}
 
+namespace Changes {//
+
+void playlist(unsigned previous_version);
+void storedPlaylists();
+void database();
+void playerState();
+void songID();
+void elapsedTime(bool update_elapsed);
+void flags();
+void mixer();
+void outputs();
+
+}
+
+}
+
+#endif // NCMPCPP_STATUS_CHECKER_H

@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,12 +18,10 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _LASTFM_SERVICE_H
-#define _LASTFM_SERVICE_H
+#ifndef NCMPCPP_LASTFM_SERVICE_H
+#define NCMPCPP_LASTFM_SERVICE_H
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
+#include "config.h"
 
 #ifdef HAVE_CURL_CURL_H
 
@@ -32,42 +30,51 @@
 
 #include "scrollpad.h"
 
-struct LastfmService
+namespace LastFm {
+
+struct Service
 {
-	typedef std::map<std::string, std::string> Args;
+	typedef std::map<std::string, std::string> Arguments;
 	typedef std::pair<bool, std::string> Result;
 	
+	Service(Arguments args) : m_arguments(args) { }
+	
 	virtual const char *name() = 0;
-	virtual Result fetch(Args &args);
+	virtual Result fetch();
 	
-	virtual bool checkArgs(const Args &args) = 0;
-	virtual void colorizeOutput(NCurses::Scrollpad &w) = 0;
+	virtual void beautifyOutput(NC::Scrollpad &w) = 0;
 	
-	protected:
-		virtual bool actionFailed(const std::string &data);
-		
-		virtual bool parse(std::string &data) = 0;
-		virtual void postProcess(std::string &data);
-		
-		virtual const char *methodName() = 0;
-		
-		static const char *baseURL;
-		static const char *msgParseFailed;
+protected:
+	virtual bool argumentsOk() = 0;
+	virtual bool actionFailed(const std::string &data);
+	
+	virtual Result processData(const std::string &data) = 0;
+	
+	virtual const char *methodName() = 0;
+	
+	Arguments m_arguments;
 };
 
-struct ArtistInfo : public LastfmService
+struct ArtistInfo : public Service
 {
+	ArtistInfo(std::string artist, std::string lang)
+	: Service({{"artist", artist}, {"lang", lang}}) { }
+	
 	virtual const char *name() { return "Artist info"; }
 	
-	virtual bool checkArgs(const Args &args);
-	virtual void colorizeOutput(NCurses::Scrollpad &w);
+	virtual void beautifyOutput(NC::Scrollpad &w);
 	
-	protected:
-		virtual bool parse(std::string &data);
-		
-		virtual const char *methodName() { return "artist.getinfo"; }
+	bool operator==(const ArtistInfo &ai) const { return m_arguments == ai.m_arguments; }
+	
+protected:
+	virtual bool argumentsOk();
+	virtual Result processData(const std::string &data);
+	
+	virtual const char *methodName() { return "artist.getinfo"; }
 };
+
+}
 
 #endif // HAVE_CURL_CURL_H
 
-#endif
+#endif // NCMPCPP_LASTFM_SERVICE_H

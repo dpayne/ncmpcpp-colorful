@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -19,190 +19,274 @@
  ***************************************************************************/
 
 #include <cassert>
+#include <boost/regex.hpp>
+#include <iostream>
 
 #include "scrollpad.h"
 
-using namespace NCurses;
+namespace {//
+
+template <typename PropT>
+bool regexSearch(NC::Buffer &buf, PropT begin, const std::string &ws, PropT end, size_t id, boost::regex::flag_type flags)
+{
+	try {
+		boost::regex rx(ws, flags);
+		auto first = boost::sregex_iterator(buf.str().begin(), buf.str().end(), rx);
+		auto last = boost::sregex_iterator();
+		bool success = first != last;
+		for (; first != last; ++first)
+		{
+			buf.setProperty(first->position(), begin, id);
+			buf.setProperty(first->position() + first->length(), end, id);
+		}
+		return success;
+	} catch (boost::bad_expression &e) {
+		std::cerr << "regexSearch: bad_expression: " << e.what() << "\n";
+		return false;
+	}
+}
+
+}
+
+namespace NC {//
 
 Scrollpad::Scrollpad(size_t startx,
-			size_t starty,
-			size_t width,
-			size_t height,
-			const std::string &title,
-			Color color,
-			Border border)
-			: Window(startx, starty, width, height, title, color, border),
-			itsBeginning(0),
-			itsFoundValueBegin(-1),
-			itsFoundValueEnd(-1),
-			itsRealHeight(1)
+size_t starty,
+size_t width,
+size_t height,
+const std::string &title,
+Color color,
+Border border)
+: Window(startx, starty, width, height, title, color, border),
+m_beginning(0),
+m_real_height(height)
 {
 }
 
-Scrollpad::Scrollpad(const Scrollpad &s) : Window(s)
+void Scrollpad::refresh()
 {
-	itsBuffer << s.itsBuffer;
-	itsBeginning = s.itsBeginning;
-	itsRealHeight = s.itsRealHeight;
+	assert(m_real_height >= m_height);
+	size_t max_beginning = m_real_height - m_height;
+	m_beginning = std::min(m_beginning, max_beginning);
+	prefresh(m_window, m_beginning, 0, m_start_y, m_start_x, m_start_y+m_height-1, m_start_x+m_width-1);
 }
 
-void Scrollpad::Flush()
+void Scrollpad::resize(size_t new_width, size_t new_height)
 {
-	itsRealHeight = 1;
-	
-	std::basic_string<my_char_t> s = itsBuffer.Str();
-	
-	size_t x = 0;
-	int x_pos = 0;
-	int space_pos = 0;
-	
-	for (size_t i = 0; i < s.length(); ++i)
-	{
-		x += s[i] != '\t' ? wcwidth(s[i]) : 8-x%8; // tab size
-		
-		if (s[i] == ' ') // if space, remember its position;
-		{
-			space_pos = i;
-			x_pos = x;
-		}
-		
-		if (x >= itsWidth)
-		{
-			// if line is over, there was at least one space in this line and we are in the middle of the word, restore position to last known space and make it EOL
-			if (space_pos > 0 && (s[i] != ' ' || s[i+1] != ' '))
-			{
-				i = space_pos;
-				x = x_pos;
-				s[i] = '\n';
-			}
-		}
-		
-		if (x >= itsWidth || s[i] == '\n')
-		{
-			itsRealHeight++;
-			x = 0;
-			space_pos = 0;
-		}
-	}
-	itsRealHeight = std::max(itsHeight, itsRealHeight);
-	Recreate(itsWidth, itsRealHeight);
-	itsBuffer.SetTemp(&s);
-	static_cast<Window &>(*this) << itsBuffer;
-	itsBuffer.SetTemp(0);
+	adjustDimensions(new_width, new_height);
+	recreate(new_width, new_height);
+	flush();
 }
 
-bool Scrollpad::SetFormatting(short val_b, const std::basic_string<my_char_t> &s, short val_e, bool case_sensitive, bool for_each)
+void Scrollpad::scroll(Scroll where)
 {
-	bool result = itsBuffer.SetFormatting(val_b, s, val_e, case_sensitive, for_each);
-	if (result)
-	{
-		itsFoundForEach = for_each;
-		itsFoundCaseSensitive = case_sensitive;
-		itsFoundValueBegin = val_b;
-		itsFoundValueEnd = val_e;
-		itsFoundPattern = s;
-	}
-	else
-		ForgetFormatting();
-	return result;
-}
-
-void Scrollpad::ForgetFormatting()
-{
-	itsFoundValueBegin = -1;
-	itsFoundValueEnd = -1;
-	itsFoundPattern.clear();
-}
-
-void Scrollpad::RemoveFormatting()
-{
-	if (itsFoundValueBegin >= 0 && itsFoundValueEnd >= 0)
-		itsBuffer.RemoveFormatting(itsFoundValueBegin, itsFoundPattern, itsFoundValueEnd, itsFoundCaseSensitive, itsFoundForEach);
-}
-
-void Scrollpad::Refresh()
-{
-	int MaxBeginning = itsRealHeight-itsHeight;
-	assert(MaxBeginning >= 0);
-	if (itsBeginning > MaxBeginning)
-		itsBeginning = MaxBeginning;
-	prefresh(itsWindow, itsBeginning, 0, itsStartY, itsStartX, itsStartY+itsHeight-1, itsStartX+itsWidth-1);
-}
-
-void Scrollpad::Resize(size_t new_width, size_t new_height)
-{
-	AdjustDimensions(new_width, new_height);
-	Flush();
-}
-
-void Scrollpad::Scroll(Where where)
-{
-	int MaxBeginning = /*itsContent.size() < itsHeight ? 0 : */itsRealHeight-itsHeight;
-	
+	assert(m_real_height >= m_height);
+	size_t max_beginning = m_real_height - m_height;
 	switch (where)
 	{
-		case wUp:
+		case Scroll::Up:
 		{
-			if (itsBeginning > 0)
-				itsBeginning--;
+			if (m_beginning > 0)
+				--m_beginning;
 			break;
 		}
-		case wDown:
+		case Scroll::Down:
 		{
-			if (itsBeginning < MaxBeginning)
-				itsBeginning++;
+			if (m_beginning < max_beginning)
+				++m_beginning;
 			break;
 		}
-		case wPageUp:
+		case Scroll::PageUp:
 		{
-			itsBeginning -= itsHeight;
-			if (itsBeginning < 0)
-				itsBeginning = 0;
+			if (m_beginning > m_height)
+				m_beginning -= m_height;
+			else
+				m_beginning = 0;
 			break;
 		}
-		case wPageDown:
+		case Scroll::PageDown:
 		{
-			itsBeginning += itsHeight;
-			if (itsBeginning > MaxBeginning)
-				itsBeginning = MaxBeginning;
+			m_beginning = std::min(m_beginning + m_height, max_beginning);
 			break;
 		}
-		case wHome:
+		case Scroll::Home:
 		{
-			itsBeginning = 0;
+			m_beginning = 0;
 			break;
 		}
-		case wEnd:
+		case Scroll::End:
 		{
-			itsBeginning = MaxBeginning;
+			m_beginning = max_beginning;
 			break;
 		}
 	}
 }
 
-void Scrollpad::Clear()
+void Scrollpad::clear()
 {
-	itsRealHeight = itsHeight;
-	itsBuffer.Clear();
-	wclear(itsWindow);
-	delwin(itsWindow);
-	itsWindow = newpad(itsHeight, itsWidth);
-	SetTimeout(itsWindowTimeout);
-	SetColor(itsColor, itsBgColor);
-	ForgetFormatting();
-	keypad(itsWindow, 1);
+	m_real_height = m_height;
+	m_buffer.clear();
+	werase(m_window);
+	delwin(m_window);
+	m_window = newpad(m_height, m_width);
+	setTimeout(m_window_timeout);
+	setColor(m_color, m_bg_color);
+	keypad(m_window, 1);
 }
 
-void Scrollpad::Reset()
+const std::string &Scrollpad::buffer()
 {
-	itsBeginning = 0;
+	return m_buffer.str();
 }
 
-#ifdef _UTF8
-Scrollpad &Scrollpad::operator<<(const std::string &s)
+void Scrollpad::flush()
 {
-	itsBuffer << ToWString(s);
-	return *this;
+	auto &w = static_cast<Window &>(*this);
+	const auto &s = m_buffer.str();
+	const auto &ps = m_buffer.properties();
+	auto p = ps.begin();
+	size_t i = 0;
+	
+	auto load_properties = [&]() {
+		for (; p != ps.end() && p->position() == i; ++p)
+			w << *p;
+	};
+	auto write_whitespace = [&]() {
+		for (; i < s.length() && iswspace(s[i]); ++i)
+		{
+			load_properties();
+			w << s[i];
+		}
+	};
+	auto write_word = [&](bool load_properties_) {
+		for (; i < s.length() && !iswspace(s[i]); ++i)
+		{
+			if (load_properties_)
+				load_properties();
+			w << s[i];
+		}
+	};
+	auto write_buffer = [&](bool generate_height_only) -> size_t {
+		int new_y;
+		size_t height = 1;
+		size_t old_i;
+		auto old_p = p;
+		int x, y;
+		i = 0;
+		p = ps.begin();
+		y = getY();
+		while (i < s.length())
+		{
+			// write all whitespaces.
+			write_whitespace();
+			
+			// if we are generating height, check difference
+			// between previous Y coord and current one and
+			// update height accordingly.
+			if (generate_height_only)
+			{
+				new_y = getY();
+				height += new_y - y;
+				y = new_y;
+			}
+			
+			if (i == s.length())
+				break;
+			
+			// save current string position state and get current
+			// coordinates as we are before the beginning of a word.
+			old_i = i;
+			old_p = p;
+			x = getX();
+			y = getY();
+			
+			// write word to test if it overflows, but do not load properties
+			// yet since if it overflows, we do not want to load them twice.
+			write_word(false);
+			
+			// restore previous indexes state
+			i = old_i;
+			p = old_p;
+			
+			// get new Y coord to see if word overflew into next line.
+			new_y = getY();
+			if (new_y != y)
+			{
+				if (generate_height_only)
+				{
+					// if it did, let's update height...
+					++height;
+				}
+				else
+				{
+					// ...or go to old coordinates, erase
+					// part of the string from previous line...
+					goToXY(x, y);
+					wclrtoeol(m_window);
+				}
+				
+				// ...start at the beginning of next line...
+				++y;
+				goToXY(0, y);
+				
+				// ...write word again, this time with properties...
+				write_word(true);
+				
+				if (generate_height_only)
+				{
+					// ... and check for potential
+					// difference in Y coordinates again.
+					new_y = getY();
+					height += new_y - y;
+				}
+			}
+			else
+			{
+				// word didn't overflow, rewrite it with properties.
+				goToXY(x, y);
+				write_word(true);
+			}
+			
+			if (generate_height_only)
+			{
+				// move to the first line, since when we do
+				// generation, m_real_height = m_height and we
+				// don't have many lines to use.
+				goToXY(getX(), 0);
+				y = 0;
+			}
+		}
+		// load remaining properties if there are any
+		for (; p != ps.end(); ++p)
+			w << *p;
+		return height;
+	};
+	m_real_height = std::max(write_buffer(true), m_height);
+	if (m_real_height > m_height)
+		recreate(m_width, m_real_height);
+	else
+		werase(m_window);
+	write_buffer(false);
 }
-#endif // _UTF8
 
+void Scrollpad::reset()
+{
+	m_beginning = 0;
+}
+
+bool Scrollpad::setProperties(Color begin, const std::string &s, Color end, size_t id, boost::regex::flag_type flags)
+{
+	return regexSearch(m_buffer, begin, s, end, id, flags);
+}
+
+bool Scrollpad::setProperties(Format begin, const std::string &s, Format end, size_t id, boost::regex::flag_type flags)
+{
+	return regexSearch(m_buffer, begin, s, end, id, flags);
+}
+
+void Scrollpad::removeProperties(size_t id)
+{
+	m_buffer.removeProperties(id);
+}
+
+}

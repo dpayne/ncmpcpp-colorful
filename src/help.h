@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,40 +18,35 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _HELP_H
-#define _HELP_H
+#ifndef NCMPCPP_HELP_H
+#define NCMPCPP_HELP_H
 
-#include "ncmpcpp.h"
+#include "actions.h"
+#include "interfaces.h"
 #include "screen.h"
 
-class Help : public Screen<Scrollpad>
+struct Help: Screen<NC::Scrollpad>, Tabbable
 {
-	public:
-		virtual void Resize();
-		virtual void SwitchTo();
-		
-		virtual std::basic_string<my_char_t> Title();
-		
-		virtual void EnterPressed() { }
-		virtual void SpacePressed() { }
-		virtual bool isTabbable() { return true; }
-		
-		virtual bool allowsSelection() { return false; }
-		
-		virtual List *GetList() { return 0; }
-		
-		virtual bool isMergable() { return true; }
-		
-	protected:
-		virtual void Init();
-		virtual bool isLockable() { return true; }
-		
-	private:
-		std::string DisplayKeys(int *, int = 2);
-		void GetKeybindings();
+	Help();
+	
+	virtual void resize() OVERRIDE;
+	virtual void switchTo() OVERRIDE;
+	
+	virtual std::wstring title() OVERRIDE;
+	virtual ScreenType type() OVERRIDE { return ScreenType::Help; }
+	
+	virtual void update() OVERRIDE { }
+	
+	virtual void enterPressed() OVERRIDE { }
+	virtual void spacePressed() OVERRIDE { }
+	
+	virtual bool isMergable() OVERRIDE { return true; }
+	
+protected:
+	virtual bool isLockable() OVERRIDE { return true; }
 };
 
 extern Help *myHelp;
 
-#endif
+#endif // NCMPCPP_HELP_H
 

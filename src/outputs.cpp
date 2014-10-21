@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -22,106 +22,88 @@
 
 #ifdef ENABLE_OUTPUTS
 
+#include "charset.h"
 #include "display.h"
 #include "global.h"
+#include "settings.h"
+#include "status.h"
+#include "statusbar.h"
+#include "title.h"
+#include "screen_switcher.h"
 
 using Global::MainHeight;
 using Global::MainStartY;
 using Global::myScreen;
 
-Outputs *myOutputs = new Outputs;
+Outputs *myOutputs;
 
-void Outputs::Init()
+Outputs::Outputs()
+: Screen(NC::Menu<MPD::Output>(0, MainStartY, COLS, MainHeight, "", Config.main_color, NC::Border::None))
 {
-	w = new Menu<MPD::Output>(0, MainStartY, COLS, MainHeight, "", Config.main_color, brNone);
-	w->CyclicScrolling(Config.use_cyclic_scrolling);
-	w->CenteredCursor(Config.centered_cursor);
-	w->HighlightColor(Config.main_highlight_color);
-	w->SetItemDisplayer(Display::Pairs);
-	
-	isInitialized = 1;
-	FetchList();
+	w.cyclicScrolling(Config.use_cyclic_scrolling);
+	w.centeredCursor(Config.centered_cursor);
+	w.setHighlightColor(Config.main_highlight_color);
+	w.setItemDisplayer([](NC::Menu<MPD::Output> &menu) {
+		menu << Charset::utf8ToLocale(menu.drawn()->value().name());
+	});
 }
 
-void Outputs::SwitchTo()
+void Outputs::switchTo()
 {
-	using Global::myLockedScreen;
-	
-	if (myScreen == this)
-		return;
-	
-	if (!isInitialized)
-		Init();
-	
-	if (myLockedScreen)
-		UpdateInactiveScreen(this);
-	
-	if (hasToBeResized || myLockedScreen)
-		Resize();
-	
-	if (myScreen != this && myScreen->isTabbable())
-		Global::myPrevScreen = myScreen;
-	myScreen = this;
-	w->Window::Clear();
-	
-	Global::RedrawHeader = 1;
+	SwitchTo::execute(this);
+	drawHeader();
 }
 
-void Outputs::Resize()
+void Outputs::resize()
 {
 	size_t x_offset, width;
-	GetWindowResizeParams(x_offset, width);
-	w->Resize(width, MainHeight);
-	w->MoveTo(x_offset, MainStartY);
+	getWindowResizeParams(x_offset, width);
+	w.resize(width, MainHeight);
+	w.moveTo(x_offset, MainStartY);
 	hasToBeResized = 0;
 }
 
-std::basic_string<my_char_t> Outputs::Title()
+std::wstring Outputs::title()
 {
-	return U("Outputs");
+	return L"Outputs";
 }
 
-void Outputs::EnterPressed()
+void Outputs::enterPressed()
 {
-	if (w->Current().second)
+	if (w.current().value().isEnabled())
 	{
-		if (Mpd.DisableOutput(w->Choice()))
-			ShowMessage("Output \"%s\" disabled", w->Current().first.c_str());
+		Mpd.DisableOutput(w.choice());
+		Statusbar::printf("Output \"%s\" disabled", w.current().value().name());
 	}
 	else
 	{
-		if (Mpd.EnableOutput(w->Choice()))
-			ShowMessage("Output \"%s\" enabled", w->Current().first.c_str());
+		Mpd.EnableOutput(w.choice());
+		Statusbar::printf("Output \"%s\" enabled", w.current().value().name());
 	}
-	if (!Mpd.SupportsIdle())
-		FetchList();
 }
 
-void Outputs::MouseButtonPressed(MEVENT me)
+void Outputs::mouseButtonPressed(MEVENT me)
 {
-	if (w->Empty() || !w->hasCoords(me.x, me.y) || size_t(me.y) >= w->Size())
+	if (w.empty() || !w.hasCoords(me.x, me.y) || size_t(me.y) >= w.size())
 		return;
 	if (me.bstate & BUTTON1_PRESSED || me.bstate & BUTTON3_PRESSED)
 	{
-		w->Goto(me.y);
+		w.Goto(me.y);
 		if (me.bstate & BUTTON3_PRESSED)
-			EnterPressed();
+			enterPressed();
 	}
 	else
-		Screen< Menu<MPD::Output> >::MouseButtonPressed(me);
+		Screen<WindowType>::mouseButtonPressed(me);
 }
 
 void Outputs::FetchList()
 {
-	if (!isInitialized)
-		return;
-	MPD::OutputList ol;
-	Mpd.GetOutputs(ol);
-	w->Clear();
-	for (MPD::OutputList::const_iterator it = ol.begin(); it != ol.end(); ++it)
-		w->AddOption(*it, it->second);
+	w.clear();
+	Mpd.GetOutputs([this](MPD::Output output) {
+		w.addItem(output, output.isEnabled());
+	});
 	if (myScreen == this)
-		w->Refresh();
+		w.refresh();
 }
 
 #endif // ENABLE_OUTPUTS

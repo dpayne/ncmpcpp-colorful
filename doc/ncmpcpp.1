@@ -19,7 +19,7 @@ Connect to server at port [6600]
 Use alternative configuration file
 .TP
 .B \-s, \-\-screen <name>
-Specify the startup screen (<name> may be: help, playlist, browser, search-engine, media-library, playlist-editor, tag-editor, outputs, visualizer, clock)
+Specify the startup screen (<name> may be: help, playlist, browser, search_engine, media_library, playlist_editor, tag_editor, outputs, visualizer, clock)
 .TP
 .B \-?, \-\-help
 Display help.
@@ -27,34 +27,14 @@ Display help.
 .B \-v, \-\-version
 Display version information.
 .TP
-.B \-\-now\-playing
-Display now playing song [{{(%l) }{{%a - }%t}}|{%f}}]
-.TP
-.B play
-Start playing and exit.
-.TP
-.B pause
-Pause and exit.
-.TP
-.B toggle
-Toggle playing and exit.
-.TP
-.B stop
-Stop playing and exit.
-.TP
-.B next
-Switch to next song and exit.
-.TP
-.B prev
-Switch to previous song and exit.
-.TP
-.B volume [+-]<number>
-Raise/lower volume by given number of percents and exit.
-.TP
 .SH "CONFIGURATION"
-When ncmpcpp starts, it tries to read user's settings from the ~/.ncmpcpp/config file. If no user's configuration is found, ncmpcpp uses its default configuration. An example configuration file containing all default values is provided with ncmpcpp and can be found usually in /usr/share/doc/ncmpcpp (exact location may depend on used distribution/OS/configure prefix).
+When ncmpcpp starts, it tries to read user's settings from the ~/.ncmpcpp/config file. If no user's configuration is found, ncmpcpp uses its default configuration. An example configuration file containing all default values is provided with ncmpcpp and can be usually found in /usr/share/doc/ncmpcpp (exact location may depend on used distribution or configure prefix).
 
-Note: Each config option value must be enclosed in quotation marks (var = "example"). If you want to use quotation mark inside config option, prepend character '\\' to it.
+Note: Configuration option values can either be enclosed in quotation marks or not.
+ - If they are enclosed, the leftmost and the rightmost quotation marks are treated as delimiters, therefore it is not necessary to escape quotation marks you use within the value itself.
+ - If they are not, any whitespace characters between = and the first printable character of the value, as well as whitespace characters after the last printable character of the value are trimmed.
+
+Therefore the rule of thumb is: if you need whitespaces at the beginning or at the end of the value, enclose it in quotation marks. Otherwise, don't.
 
 Note: COLOR has to be the name (not a number) of one of colors 1-8 from SONG FORMAT section.
 
@@ -81,9 +61,6 @@ Set connection timeout to MPD to given value.
 .B mpd_crossfade_time = SECONDS
 Default number of seconds to crossfade, if enabled by ncmpcpp.
 .TP
-.B mpd_communication_mode = MODE
-If set to 'polling', ncmpcpp will constantly poll mpd for its status. If set to 'notifications', ncmppcp will make use of 'idle' command and wait for events. This is more efficient and responsive, but may cause some trouble with <mpd-0.15, so if you run such version and encounter strange bugs (e.g. current track time not being updated), you will either have to use 'polling' or upgrade your mpd.
-.TP
 .B visualizer_in_stereo = yes/no
 Should be set to 'yes', if fifo output's format was set to 44100:16:2.
 .TP
@@ -92,6 +69,9 @@ Path to mpd fifo output. This is needed to make music visualizer work (note that
 .TP
 .B visualizer_output_name = NAME
 Name of output that provides data for visualizer. Needed to keep sound and visualization in sync.
+.TP
+.B visualizer_sample_multiplier = NUMBER
+Multiply received samples by given value. Very useful for proper visualization of quiet music.
 .TP
 .B visualizer_sync_interval = SECONDS
 Defines interval between syncing visualizer and audio outputs.
@@ -107,6 +87,9 @@ If you use encoding other than utf8, set it in order to handle utf8 encoded stri
 .TP
 .B seek_time = SECONDS
 Base seek time to begin with.
+.TP 
+.B volume_change_step = NUMBER
+Number of percents volume has to be increased/decreased by in volume_up/volume_down.
 .TP 
 .B playlist_disable_highlight_delay = SECONDS
 Delay for highlighting playlist since the last key was pressed. If set to 0, highlighting never fades away.
@@ -131,6 +114,12 @@ Format for albums' list in Tag editor.
 .TP 
 .B song_window_title_format
 Song format for window title.
+.TP
+.B browser_sort_mode
+Determines sort mode for browser. Possible values are "name", "mtime", "format" and "noop".
+.TP
+.B browser_sort_format
+Format to use for sorting songs in browser. For this option to be effective, browser_sort_mode must be set to "format".
 .TP 
 .B external_editor = PATH
 Path to external editor used to edit lyrics.
@@ -153,6 +142,9 @@ Prefix for selected items.
 .B selected_item_suffix = TEXT
 Suffix for selected items.
 .TP 
+.B modified_item_prefix = TEXT
+Prefix for modified item (tag editor).
+.TP 
 .B alternative_header_first_line_format = TEXT
 Now playing song format for the first line in alternative user interface header window.
 .TP 
@@ -170,9 +162,6 @@ No need to describe it, huh?
 .TP 
 .B header_text_scrolling = yes/no
 If enabled, text in header window will scroll if its length is longer then actual screen width, otherwise it won't.
-.TP 
-.B fancy_scrolling = yes/no
-If enabled, content of other columns will be updated immediately while scrolling, otherwise only after you stop scrolling.
 .TP 
 .B cyclic_scrolling = yes/no
 If enabled, cyclic scrolling is used (e.g. if you press down arrow being at the end of list, it'll take you to the beginning)
@@ -228,14 +217,14 @@ If enabled, currently highlighted position in the list will be always centered.
 .B progressbar_look = TEXT
 This variable defines the look of progressbar. Note that it has to be exactly two or three characters long.
 .TP 
+.B progressbar_boldness = yes/no
+This variable defines whether progressbar should be displayed in bold or not.
+.TP 
 .B default_find_mode = wrapped/normal
 If set to "wrapped", going from last found position to next will take you to the first one (same goes for the first position and going to previous one), otherwise no actions will be performed.
 .TP 
 .B default_space_mode = select/add
 If set to "select", space will select items instead of adding them to playlist (although selecting by space is default and the only one action for space in Playlist).
-.TP 
-.B default_tag_editor_left_col = albums/dirs
-If set to "albums", tag editor will display list of all albums from database, otherwise it'll allow you to browse the database.
 .TP 
 .B incremental_seeking = yes/no
 If enabled, seek time will increment by one each second of seeking.
@@ -249,11 +238,17 @@ If enabled, each time song changes lyrics fetcher will be automatically run in b
 .B store_lyrics_in_song_dir = yes/no
 If enabled, lyrics will be saved in song's directory, otherwise in ~/.lyrics. Note that it needs properly set mpd_music_dir.
 .TP
+.B generate_win32_compatible_filenames = yes/no
+If set to yes, filenames generated by ncmpcpp (with tag editor, for lyrics, artists etc.) will not contain the following characters: \\?*:|"<> - otherwise only slash (/) will not be used.
+.TP
+.B allow_for_physical_item_deletion = yes/no
+If set to yes, it will be possible to physically delete files and directories from the disk in the browser.
+.TP
 .B lastfm_preferred_language = ISO 639 alpha-2 language code
 If set, ncmpcpp will try to get info from last.fm in language you set and if it fails, it will fall back to english. Otherwise it will use english the first time.
 .TP
-.B ncmpc_like_songs_adding = yes/no
-If enabled, pressing space on item, which is already in playlist will remove it, otherwise add it again.
+.B space_add_mode = add_remove/always_add
+If set to add_remove, pressing space on item which is already in playlist will remove it, otherwise add it again.
 .TP 
 .B show_hidden_files_in_local_browser = yes/no
 Trigger for displaying in local browser files and directories that begin with '.'
@@ -265,7 +260,10 @@ If set to "playlist", Search engine will perform searching in current MPD playli
 If enabled, screens' names and their keybindings will be shown in header window until key is pressed, otherwise they won't be displayed at all.
 .TP 
 .B screen_switcher_mode = SWITCHER_MODE
-If set to "previous", key_screen_switcher will switch between current and last used screen. If set to "sequence: user_defined_sequence", it will switch between given sequence of screens. Syntax clarification can be found in example config file.
+If set to "previous", key_screen_switcher will switch between current and last used screen. If set to "screen1,...screenN" (a list of screens) it will switch between them in a sequence. Syntax clarification can be found in example config file.
+.TP 
+.B startup_screen = SCREEN_NAME
+Screen that has to be displayed at start (playlist by default).
 .TP 
 .B locked_screen_width_part = 20-80
 If you want to lock a screen, ncmpcpp asks for % of locked screen's width to be reserved before that and provides a default value, which is the one you can set here.
@@ -273,14 +271,11 @@ If you want to lock a screen, ncmpcpp asks for % of locked screen's width to be 
 .B ask_for_locked_screen_width_part = yes/no
 If enabled, ncmpcpp will ask for % of locked screen's width each time you want to lock a screen. If you disable that, it'll silently attempt to use default value.
 .TP 
-.B startup_screen = SCREEN_NUMBER
-Screen that has to be displayed at start (playlist by default).
-.TP 
 .B jump_to_now_playing_song_at_start = yes/no
 If enabled, ncmpcpp will jump at start to now playing song if mpd is playing or paused.
 .TP 
-.B ask_before_clearing_main_playlist = yes/no
-If enabled, user will be asked if he really wants to clear the main playlist after pressing key responsible for that.
+.B ask_before_clearing_playlists = yes/no
+If enabled, user will be asked if he really wants to clear the playlist after pressing key responsible for that.
 .TP 
 .B clock_display_seconds = yes/no
 If enabled, clock will display time in format hh:mm:ss, otherwise hh:mm.
@@ -295,7 +290,7 @@ If enabled, bitrate of currently playing song will be displayed in statusbar.
 If enabled, remaining time of currently playing song will be be displayed in statusbar instead of elapsed time.
 .TP 
 .B ignore_leading_the = yes/no
-If enabled, word "the" at the beginning of tags/filenames will be ignored while sorting items.
+If enabled, word "the" at the beginning of tags/filenames/sort format will be ignored while sorting items.
 .TP 
 .B use_console_editor = yes/no
 If your external editor is console application, you need to enable it.
@@ -306,23 +301,8 @@ If enabled, fields in Search engine above "Reset" button will be blocked after s
 .B mouse_support = yes/no
 Self-descriptive, isn't it?
 .TP 
-.B allow_physical_files_deletion = yes/no
-If enabled, ncmpcpp will be able to delete files using its browser screen.
-.TP 
-.B allow_physical_directories_deletion = yes/no
-If enabled, ncmpcpp will be able to delete directories using its browser screen.
-.TP 
 .B tag_editor_extended_numeration  = yes/no
 If enabled, tag editor will number tracks using format xx/yy (where xx is the current track and yy is total amount of all numbered tracks), not plain xx.
-.TP
-.B media_library_display_date  = yes/no
-If enabled, dates of albums in media library will be displayed and respected in searching, otherwise not.
-.TP
-.B media_library_display_empty_tag  = yes/no
-If enabled, left column will contain entry for 'empty' tag, otherwise not.
-.TP
-.B media_library_disable_two_column_mode  = yes/no
-If enabled, pressing the key for the media library twice won't switch it to two column mode.
 .TP
 .B enable_window_title = yes/no
 If enabled, ncmpcpp will override current window title with its own one.
@@ -333,11 +313,17 @@ Type of currently used regular expressions.
 .B user_interface = classic/alternative
 Default user interface used by ncmpcpp at start.
 .TP 
-.B media_library_left_column = a/y/g/c/p
-Default tag type for left column in media library. Legend for possible letters is in  SONG FORMAT section.
+.B data_fetching_delay = yes/no
+If enabled, there will be a 250ms delay between refreshing position in media library or playlist editor and fetching appropriate data from MPD. This limits data fetched from the server and is particularly useful if ncmpcpp is connected to a remote host.
+.TP
+.B media_library_primary_tag = artist/date/genre/composer/performer
+Default tag type for leftmost column in media library.
 .TP 
 .B empty_tag_marker = TEXT
 Text that will be displayed, if requested tag is not set.
+.TP 
+.B tags_separator = TEXT
+Separator that is placed between tags. Also interpreted by tag editor which splits input string into separate tags using it.
 .TP 
 .B empty_tag_color = COLOR
 Color of empty tag marker.
@@ -363,6 +349,9 @@ Color of main window's highlight.
 .B progressbar_color = COLOR
 Color of progressbar.
 .TP 
+.B progressbar_elapsed_color = COLOR
+Color of part of progressbar that represents elapsed time.
+.TP 
 .B statusbar_color = COLOR
 Color of statusbar.
 .TP 
@@ -378,10 +367,10 @@ Color of visualization.
 .B active_window_border = COLOR
 Color of active window's border.
 .TP 
-.SH "KEYS"
-When ncmpcpp starts, it tries to read user's keybindings from ~/.ncmpcpp/keys file. If no user's keybindings is found, ncmpcpp uses its default keybindings. An example keybindings file containing all default values is provided with ncmpcpp and can be found usually in /usr/share/doc/ncmpcpp (exact location may depend on used distribution/OS/configure prefix).
+.SH "BINDINGS"
+When ncmpcpp starts, it tries to read user's bindings from ~/.ncmpcpp/bindings file. If no bindings file is found, ncmpcpp uses the defaults. An example bindings file with the default values can be found usually in /usr/share/doc/ncmpcpp (exact location may depend on used distribution or configure prefix).
 
-You can view current ncmpcpp's keybindings by pressing '1' (Help).
+You can view current keybindings by pressing F1.
 .SH "SONG FORMAT"
 
 For song format you can use:
@@ -393,7 +382,7 @@ For song format you can use:
  %A - album artist
  %t - title
  %b - album
- %y - year
+ %y - date
  %n - track number (01/12 -> 01)
  %N - full track info (01/12 -> 01/12)
  %g - genre
@@ -401,6 +390,7 @@ For song format you can use:
  %p - performer
  %d - disc
  %C - comment
+ %P - priority
  $R - begin right alignment
 
 You can also put them in { } and then they will be displayed only if all requested values are available and/or define alternate value with { }|{ } e.g. {%a - %t}|{%f} will check if artist and title tags are available and if they are, display them. Otherwise it'll display filename.

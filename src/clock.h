@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,59 +18,54 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _CLOCK_H
-#define _CLOCK_H
+#ifndef NCMPCPP_CLOCK_H
+#define NCMPCPP_CLOCK_H
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
+#include "config.h"
 
 #ifdef ENABLE_CLOCK
 
-#include "window.h"
+#include "interfaces.h"
 #include "screen.h"
+#include "window.h"
 
-class Clock : public Screen<Window>
+struct Clock: Screen<NC::Window>, Tabbable
 {
-	public:
-		virtual void Resize();
-		virtual void SwitchTo();
-		
-		virtual std::basic_string<my_char_t> Title();
-		
-		virtual void Update();
-		virtual void Scroll(Where, const int *) { }
-		
-		virtual void EnterPressed() { }
-		virtual void SpacePressed() { }
-		virtual void MouseButtonPressed(MEVENT) { }
-		virtual bool isTabbable() { return true; }
-		
-		virtual bool allowsSelection() { return false; }
-		
-		virtual List *GetList() { return 0; }
-		
-		virtual bool isMergable() { return true; }
-		
-	protected:
-		virtual void Init();
-		virtual bool isLockable() { return false; }
-		
-	private:
-		Window *itsPane;
-		
-		static void Prepare();
-		static void Set(int, int);
-		
-		static short disp[11];
-		static long older[6], next[6], newer[6], mask;
-		
-		static size_t Width;
-		static const size_t Height;
+	Clock();
+	
+	virtual void resize() OVERRIDE;
+	virtual void switchTo() OVERRIDE;
+	
+	virtual std::wstring title() OVERRIDE;
+	virtual ScreenType type() OVERRIDE { return ScreenType::Clock; }
+	
+	virtual void update() OVERRIDE;
+	virtual void scroll(NC::Scroll) OVERRIDE { }
+	
+	virtual void enterPressed() OVERRIDE { }
+	virtual void spacePressed() OVERRIDE { }
+	virtual void mouseButtonPressed(MEVENT) OVERRIDE { }
+	
+	virtual bool isMergable() OVERRIDE { return true; }
+	
+protected:
+	virtual bool isLockable() OVERRIDE { return false; }
+	
+private:
+	NC::Window m_pane;
+	
+	static void Prepare();
+	static void Set(int, int);
+	
+	static short disp[11];
+	static long older[6], next[6], newer[6], mask;
+	
+	static size_t Width;
+	static const size_t Height;
 };
 
 extern Clock *myClock;
 
 #endif // ENABLE_CLOCK
 
-#endif
+#endif // NCMPCPP_CLOCK_H

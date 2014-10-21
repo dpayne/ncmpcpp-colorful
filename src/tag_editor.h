@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,126 +18,94 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _TAG_EDITOR_H
-#define _TAG_EDITOR_H
+#ifndef NCMPCPP_TAG_EDITOR_H
+#define NCMPCPP_TAG_EDITOR_H
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
+#include "config.h"
 
 #ifdef HAVE_TAGLIB_H
 
 #include <list>
 
-// taglib headers
-#include "xiphcomment.h"
-#include "fileref.h"
-#include "tag.h"
-
-#include "mpdpp.h"
+#include "interfaces.h"
+#include "mutable_song.h"
+#include "regex_filter.h"
 #include "screen.h"
 
-class TagEditor : public Screen<Window>
+struct TagEditor: Screen<NC::Window *>, Filterable, HasColumns, HasSongs, Searchable, Tabbable
 {
-	public:
-		TagEditor() : FParser(0), FParserHelper(0), FParserLegend(0), FParserPreview(0), itsBrowsedDir("/") { }
-		
-		virtual void Resize();
-		virtual void SwitchTo();
-		
-		virtual std::basic_string<my_char_t> Title();
-		
-		virtual void Refresh();
-		virtual void Update();
-		
-		virtual void EnterPressed();
-		virtual void SpacePressed();
-		virtual void MouseButtonPressed(MEVENT);
-		virtual bool isTabbable() { return true; }
-		
-		virtual MPD::Song *CurrentSong();
-		virtual MPD::Song *GetSong(size_t pos) { return w == Tags ? &Tags->at(pos) : 0; }
-		
-		virtual bool allowsSelection() { return w == Tags; }
-		virtual void ReverseSelection() { Tags->ReverseSelection(); }
-		virtual void GetSelectedSongs(MPD::SongList &);
-		
-		virtual void ApplyFilter(const std::string &);
-		
-		virtual List *GetList();
-		
-		virtual bool isMergable() { return true; }
-		
-		bool NextColumn();
-		bool PrevColumn();
-		
-		void LocateSong(const MPD::Song &s);
-		
-		Menu<string_pair> *LeftColumn;
-		Menu<string_pair> *Albums;
-		Menu<string_pair> *Dirs;
-		Menu<std::string> *TagTypes;
-		Menu<MPD::Song> *Tags;
-		
-		/// NOTICE: this string is always in utf8, no need to convert it
-		const std::string &CurrentDir() { return itsBrowsedDir; }
-		
-		static void ReadTags(MPD::Song &);
-		static bool WriteTags(MPD::Song &);
-		
-	protected:
-		virtual void Init();
-		virtual bool isLockable() { return true; }
-		
-	private:
-		void SetDimensions(size_t, size_t);
-		
-		MPD::SongList EditedSongs;
-		Menu<std::string> *FParserDialog;
-		Menu<std::string> *FParser;
-		Scrollpad *FParserHelper;
-		Scrollpad *FParserLegend;
-		Scrollpad *FParserPreview;
-		bool FParserUsePreview;
-		
-		static std::string CapitalizeFirstLetters(const std::string &);
-		static void CapitalizeFirstLetters(MPD::Song &);
-		static void LowerAllLetters(MPD::Song &);
-		static void GetTagList(TagLib::StringList &, const MPD::Song &, MPD::Song::GetFunction);
-		static void WriteXiphComments(const MPD::Song &, TagLib::Ogg::XiphComment *);
-		
-		static void GetPatternList();
-		static void SavePatternList();
-		static MPD::Song::SetFunction IntoSetFunction(char);
-		static std::string GenerateFilename(const MPD::Song &, const std::string &);
-		static std::string ParseFilename(MPD::Song &, std::string, bool);
-		
-		static std::string TagToString(const MPD::Song &, void *);
-		
-		std::string itsBrowsedDir;
-		std::string itsHighlightedDir;
-		
-		static std::string PatternsFile;
-		static std::list<std::string> Patterns;
-		
-		static size_t MiddleColumnWidth;
-		static size_t LeftColumnStartX;
-		static size_t LeftColumnWidth;
-		static size_t MiddleColumnStartX;
-		static size_t RightColumnWidth;
-		static size_t RightColumnStartX;
-		
-		static size_t FParserDialogWidth;
-		static size_t FParserDialogHeight;
-		static size_t FParserWidth;
-		static size_t FParserWidthOne;
-		static size_t FParserWidthTwo;
-		static size_t FParserHeight;
+	TagEditor();
+	
+	virtual void resize() OVERRIDE;
+	virtual void switchTo() OVERRIDE;
+	
+	virtual std::wstring title() OVERRIDE;
+	virtual ScreenType type() OVERRIDE { return ScreenType::TagEditor; }
+	
+	virtual void refresh() OVERRIDE;
+	virtual void update() OVERRIDE;
+	
+	virtual void enterPressed() OVERRIDE;
+	virtual void spacePressed() OVERRIDE;
+	virtual void mouseButtonPressed(MEVENT) OVERRIDE;
+	
+	virtual bool isMergable() OVERRIDE { return true; }
+	
+	// Filterable implementation
+	virtual bool allowsFiltering() OVERRIDE;
+	virtual std::string currentFilter() OVERRIDE;
+	virtual void applyFilter(const std::string &filter) OVERRIDE;
+	
+	// Searchable implementation
+	virtual bool allowsSearching() OVERRIDE;
+	virtual bool search(const std::string &constraint) OVERRIDE;
+	virtual void nextFound(bool wrap) OVERRIDE;
+	virtual void prevFound(bool wrap) OVERRIDE;
+	
+	// HasSongs implementation
+	virtual ProxySongList proxySongList() OVERRIDE;
+	
+	virtual bool allowsSelection() OVERRIDE;
+	virtual void reverseSelection() OVERRIDE;
+	virtual MPD::SongList getSelectedSongs() OVERRIDE;
+	
+	// HasColumns implementation
+	virtual bool previousColumnAvailable() OVERRIDE;
+	virtual void previousColumn() OVERRIDE;
+	
+	virtual bool nextColumnAvailable() OVERRIDE;
+	virtual void nextColumn() OVERRIDE;
+	
+	// private members
+	bool ifAnyModifiedAskForDiscarding();
+	void LocateSong(const MPD::Song &s);
+	const std::string &CurrentDir() { return itsBrowsedDir; }
+	
+	NC::Menu< std::pair<std::string, std::string> > *Dirs;
+	NC::Menu<std::string> *TagTypes;
+	NC::Menu<MPD::MutableSong> *Tags;
+	
+protected:
+	virtual bool isLockable() OVERRIDE { return true; }
+	
+private:
+	void SetDimensions(size_t, size_t);
+	
+	std::vector<MPD::MutableSong *> EditedSongs;
+	NC::Menu<std::string> *FParserDialog;
+	NC::Menu<std::string> *FParser;
+	NC::Scrollpad *FParserHelper;
+	NC::Scrollpad *FParserLegend;
+	NC::Scrollpad *FParserPreview;
+	bool FParserUsePreview;
+	
+	std::string itsBrowsedDir;
+	std::string itsHighlightedDir;
 };
 
 extern TagEditor *myTagEditor;
 
-#endif
+#endif // HAVE_TAGLIB_H
 
-#endif
+#endif // NCMPCPP_TAG_EDITOR_H
 

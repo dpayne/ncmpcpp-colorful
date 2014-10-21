@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,85 +18,77 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _VISUALIZER_H
-#define _VISUALIZER_H
+#ifndef NCMPCPP_VISUALIZER_H
+#define NCMPCPP_VISUALIZER_H
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
+#include "config.h"
 
 #ifdef ENABLE_VISUALIZER
 
-#include "window.h"
+#include <boost/date_time/posix_time/posix_time_types.hpp>
+#include "interfaces.h"
 #include "screen.h"
+#include "window.h"
 
 #ifdef HAVE_FFTW3_H
 # include <fftw3.h>
 #endif
 
-typedef void (*DrawFuncPtr)(int16_t *, ssize_t, size_t, size_t, bool);
-
-class Visualizer : public Screen<Window>
+struct Visualizer: Screen<NC::Window>, Tabbable
 {
+	Visualizer();
 
-	public:
-		virtual void SwitchTo();
-		virtual void Resize();
+	virtual void switchTo() OVERRIDE;
+	virtual void resize() OVERRIDE;
 
-		virtual std::basic_string<my_char_t> Title();
+	virtual std::wstring title() OVERRIDE;
+	virtual ScreenType type() OVERRIDE { return ScreenType::Visualizer; }
 
-		virtual void Update();
-		virtual void Scroll(Where, const int *) { }
+	virtual void update() OVERRIDE;
+	virtual void scroll(NC::Scroll) OVERRIDE { }
 
-		virtual void EnterPressed() { }
-		virtual void SpacePressed();
-		virtual void MouseButtonPressed(MEVENT) { }
-		virtual bool isTabbable() { return true; }
+	virtual int windowTimeout() OVERRIDE;
 
-		virtual NCurses::List *GetList() { return 0; }
+	virtual void enterPressed() OVERRIDE { }
+	virtual void spacePressed() OVERRIDE;
+	virtual void mouseButtonPressed(MEVENT) OVERRIDE { }
 
-		virtual bool allowsSelection() { return false; }
+	virtual bool isMergable() OVERRIDE { return true; }
 
-		virtual bool isMergable() { return true; }
+	// private members
+	void SetFD();
+	void ResetFD();
+	void FindOutputID();
 
-		void SetFD();
-		void ResetFD();
-		void FindOutputID();
+protected:
+	virtual bool isLockable() OVERRIDE { return true; }
 
-		static const int WindowTimeout;
+private:
+	NC::Color toColor(int, int);
+	void DrawSoundWave(int16_t *, ssize_t, size_t, size_t);
+	void DrawSoundWaveFill(int16_t *, ssize_t, size_t, size_t);
+#	ifdef HAVE_FFTW3_H
+	void DrawFrequencySpectrum(int16_t *, ssize_t, size_t, size_t);
+#	endif // HAVE_FFTW3_H
 
-	protected:
-		virtual void Init();
-		virtual bool isLockable() { return true; }
+	int m_output_id;
+	boost::posix_time::ptime m_timer;
 
-	private:
-		Color toColor( int number, int max );
-		char toAsciiGrey( int number, int max );
-		void DrawSoundWave(int16_t *, ssize_t, size_t, size_t, bool);
-		void DrawSoundWaveFill(int16_t *, ssize_t, size_t, size_t, bool);
-		void DrawSoundWaveFillAscii(int16_t *, ssize_t, size_t, size_t, bool);
-#		ifdef HAVE_FFTW3_H
-		void DrawFrequencySpectrum(int16_t *, ssize_t, size_t, size_t, bool);
-#		endif // HAVE_FFTW3_H
-
-		int itsOutputID;
-		timeval itsTimer;
-
-		int itsFifo;
-		unsigned itsSamples;
-#		ifdef HAVE_FFTW3_H
-		unsigned itsFFTResults;
-		unsigned *itsFreqsMagnitude;
-		double *itsInput;
-		fftw_complex *itsOutput;
-		fftw_plan itsPlan;
-#		endif // HAVE_FFTW3_H
+	int m_fifo;
+	unsigned m_samples;
+#	ifdef HAVE_FFTW3_H
+	unsigned m_fftw_results;
+	double *m_freq_magnitudes;
+	double *m_fftw_input;
+	fftw_complex *m_fftw_output;
+	fftw_plan m_fftw_plan;
+#	endif // HAVE_FFTW3_H
 };
 
 extern Visualizer *myVisualizer;
 
 #endif // ENABLE_VISUALIZER
 
-#endif
+#endif // NCMPCPP_VISUALIZER_H
 
 /* vim: set tabstop=4 softtabstop=4 shiftwidth=4 noexpandtab : */

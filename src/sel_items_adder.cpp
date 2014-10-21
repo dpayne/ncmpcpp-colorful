@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,256 +18,295 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#include "charset.h"
+#include <boost/bind.hpp>
+#include <algorithm>
+
 #include "browser.h"
-#include "display.h"
 #include "global.h"
+#include "helpers.h"
 #include "mpdpp.h"
 #include "playlist.h"
-#include "playlist_editor.h"
 #include "sel_items_adder.h"
+#include "settings.h"
+#include "statusbar.h"
+#include "utility/comparators.h"
+#include "screen_switcher.h"
+#include "charset.h"
 
-using Global::MainHeight;
-using Global::MainStartY;
-using Global::myScreen;
-using Global::myOldScreen;
+SelectedItemsAdder *mySelectedItemsAdder;
 
-SelectedItemsAdder *mySelectedItemsAdder = new SelectedItemsAdder;
+namespace {//
 
-void SelectedItemsAdder::Init()
+void DisplayComponent(SelectedItemsAdder::Component &menu)
 {
-	SetDimensions();
-	itsPlaylistSelector = new Menu<std::string>((COLS-itsWidth)/2, (MainHeight-itsHeight)/2+MainStartY, itsWidth, itsHeight, "Add selected item(s) to...", Config.main_color, Config.window_border);
-	itsPlaylistSelector->CyclicScrolling(Config.use_cyclic_scrolling);
-	itsPlaylistSelector->CenteredCursor(Config.centered_cursor);
-	itsPlaylistSelector->HighlightColor(Config.main_highlight_color);
-	itsPlaylistSelector->SetItemDisplayer(Display::Generic);
-	
-	itsPositionSelector = new Menu<std::string>((COLS-itsPSWidth)/2, (MainHeight-itsPSHeight)/2+MainStartY, itsPSWidth, itsPSHeight, "Where?", Config.main_color, Config.window_border);
-	itsPositionSelector->CyclicScrolling(Config.use_cyclic_scrolling);
-	itsPositionSelector->CenteredCursor(Config.centered_cursor);
-	itsPositionSelector->HighlightColor(Config.main_highlight_color);
-	itsPositionSelector->SetItemDisplayer(Display::Generic);
-	itsPositionSelector->AddOption("At the end of playlist");
-	itsPositionSelector->AddOption("At the beginning of playlist");
-	itsPositionSelector->AddOption("After current track");
-	itsPositionSelector->AddOption("After current album");
-	itsPositionSelector->AddOption("After highlighted item");
-	itsPositionSelector->AddSeparator();
-	itsPositionSelector->AddOption("Cancel");
-	
-	w = itsPlaylistSelector;
-	isInitialized = 1;
+	menu << Charset::utf8ToLocale(menu.drawn()->value().item());
 }
 
-void SelectedItemsAdder::SwitchTo()
+}
+
+SelectedItemsAdder::SelectedItemsAdder()
 {
-	if (myScreen == this)
+	using Global::MainHeight;
+	using Global::MainStartY;
+	setDimensions();
+	
+	m_playlist_selector = Component(
+		(COLS-m_playlist_selector_width)/2,
+		MainStartY+(MainHeight-m_playlist_selector_height)/2,
+		m_playlist_selector_width,
+		m_playlist_selector_height,
+		"Add selected item(s) to...",
+		Config.main_color,
+		Config.window_border
+	);
+	m_playlist_selector.cyclicScrolling(Config.use_cyclic_scrolling);
+	m_playlist_selector.centeredCursor(Config.centered_cursor);
+	m_playlist_selector.setHighlightColor(Config.main_highlight_color);
+	m_playlist_selector.setItemDisplayer(DisplayComponent);
+	
+	m_position_selector = Component(
+		(COLS-m_position_selector_width)/2,
+		MainStartY+(MainHeight-m_position_selector_height)/2,
+		m_position_selector_width,
+		m_position_selector_height,
+		"Scroll?",
+		Config.main_color,
+		Config.window_border
+	);
+	m_position_selector.cyclicScrolling(Config.use_cyclic_scrolling);
+	m_position_selector.centeredCursor(Config.centered_cursor);
+	m_position_selector.setHighlightColor(Config.main_highlight_color);
+	m_position_selector.setItemDisplayer(DisplayComponent);
+	
+	m_position_selector.addItem(Entry("At the end of playlist",
+		boost::bind(&Self::addAtTheEndOfPlaylist, this)
+	));
+	m_position_selector.addItem(Entry("At the beginning of playlist",
+		boost::bind(&Self::addAtTheBeginningOfPlaylist, this)
+	));
+	m_position_selector.addItem(Entry("After current song",
+		boost::bind(&Self::addAfterCurrentSong, this)
+	));
+	m_position_selector.addItem(Entry("After current album",
+		boost::bind(&Self::addAfterCurrentAlbum, this)
+	));
+	m_position_selector.addItem(Entry("After highlighted item",
+		boost::bind(&Self::addAfterHighlightedSong, this)
+	));
+	m_position_selector.addSeparator();
+	m_position_selector.addItem(Entry("Cancel",
+		boost::bind(&Self::cancel, this)
+	));
+	
+	w = &m_playlist_selector;
+}
+
+void SelectedItemsAdder::switchTo()
+{
+	using Global::myScreen;
+	
+	auto hs = hasSongs(myScreen);
+	if (!hs || !hs->allowsSelection())
+		return;
+	
+	Statusbar::print(1, "Fetching selected songs...");
+	m_selected_items = hs->getSelectedSongs();
+	if (m_selected_items.empty())
 	{
-		myOldScreen->SwitchTo();
+		Statusbar::print("List of selected items is empty");
 		return;
 	}
-	if (!myScreen->allowsSelection())
-		return;
-	
-	if (MainHeight < 5)
-	{
-		ShowMessage("Screen is too small to display this window!");
-		return;
-	}
-	
-	if (!isInitialized)
-		Init();
-	
+	populatePlaylistSelector(myScreen);
+	SwitchTo::execute(this);
 	// default to main window
-	w = itsPlaylistSelector;
-	
-	// Resize() can fall back to old screen, so we need it updated
-	myOldScreen = myScreen;
-	
-	if (hasToBeResized)
-		Resize();
-	
-	bool playlists_not_active = myScreen == myBrowser && myBrowser->isLocal();
-	if (playlists_not_active)
-		ShowMessage("Local items cannot be added to m3u playlist!");
-	
-	w->Clear();
-	w->Reset();
-	if (myOldScreen != myPlaylist)
-		w->AddOption("Current MPD playlist", 0, 0);
-	w->AddOption("New playlist", 0, playlists_not_active);
-	w->AddSeparator();
-	
-	MPD::TagList playlists;
-	Mpd.GetPlaylists(playlists);
-	sort(playlists.begin(), playlists.end(), CaseInsensitiveSorting());
-	for (MPD::TagList::iterator it = playlists.begin(); it != playlists.end(); ++it)
-	{
-		utf_to_locale(*it);
-		w->AddOption(*it, 0, playlists_not_active);
-	}
-	w->AddSeparator();
-	w->AddOption("Cancel");
-	
-	myScreen = this;
-	w->Window::Clear();
+	w = &m_playlist_selector;
 }
 
-void SelectedItemsAdder::Resize()
+void SelectedItemsAdder::resize()
 {
-	SetDimensions();
-	if (itsHeight < 5) // screen too low to display this window
-		return myOldScreen->SwitchTo();
-	itsPlaylistSelector->Resize(itsWidth, itsHeight);
-	itsPlaylistSelector->MoveTo((COLS-itsWidth)/2, (MainHeight-itsHeight)/2+MainStartY);
-	size_t poss_width = std::min(itsPSWidth, size_t(COLS));
-	size_t poss_height = std::min(itsPSHeight, size_t(MainHeight));
-	itsPositionSelector->Resize(poss_width, poss_height);
-	itsPositionSelector->MoveTo((COLS-poss_width)/2, (MainHeight-poss_height)/2+MainStartY);
-	if (myOldScreen && myOldScreen->hasToBeResized) // resize background window
+	using Global::MainHeight;
+	using Global::MainStartY;
+	setDimensions();
+	m_playlist_selector.resize(m_playlist_selector_width, m_playlist_selector_height);
+	m_playlist_selector.moveTo(
+		(COLS-m_playlist_selector_width)/2,
+		MainStartY+(MainHeight-m_playlist_selector_height)/2
+	);
+	m_position_selector.resize(m_position_selector_width, m_position_selector_height);
+	m_position_selector.moveTo(
+		(COLS-m_position_selector_width)/2,
+		MainStartY+(MainHeight-m_position_selector_height)/2
+	);
+	if (previousScreen() && previousScreen()->hasToBeResized) // resize background window
 	{
-		myOldScreen->Resize();
-		myOldScreen->Refresh();
+		previousScreen()->resize();
+		previousScreen()->refresh();
 	}
 	hasToBeResized = 0;
 }
 
-void SelectedItemsAdder::Refresh()
+void SelectedItemsAdder::refresh()
 {
-	if (w == itsPositionSelector)
+	if (isActiveWindow(m_position_selector))
 	{
-		itsPlaylistSelector->Display();
-		itsPositionSelector->Display();
+		m_playlist_selector.display();
+		m_position_selector.display();
 	}
-	else
-		itsPlaylistSelector->Display();
+	else if (isActiveWindow(m_playlist_selector))
+		m_playlist_selector.display();
 }
 
-std::basic_string<my_char_t> SelectedItemsAdder::Title()
+std::wstring SelectedItemsAdder::title()
 {
-	return myOldScreen->Title();
+	return previousScreen()->title();
 }
 
-void SelectedItemsAdder::EnterPressed()
+void SelectedItemsAdder::enterPressed()
 {
-	size_t pos = w->Choice();
-
-	// adding to current playlist is disabled when playlist is active
-	if (w == itsPlaylistSelector && myOldScreen == myPlaylist && pos == 0)
-		pos++;
-	
-	MPD::SongList list;
-	if ((w != itsPlaylistSelector || pos != 0) && pos != w->Size()-1)
-		myOldScreen->GetSelectedSongs(list);
-	
-	if (w == itsPlaylistSelector)
-	{
-		if (pos == 0) // add to mpd playlist
-		{
-			w = itsPositionSelector;
-			itsPositionSelector->Reset();
-			return;
-		}
-		else if (pos == 1) // create new playlist
-		{
-			LockStatusbar();
-			Statusbar() << "Save playlist as: ";
-			std::string playlist = Global::wFooter->GetString();
-			UnlockStatusbar();
-			if (!playlist.empty())
-			{
-				std::string utf_playlist = locale_to_utf_cpy(playlist);
-				Mpd.StartCommandsList();
-				for (MPD::SongList::const_iterator it = list.begin(); it != list.end(); ++it)
-					Mpd.AddToPlaylist(utf_playlist, **it);
-				if (Mpd.CommitCommandsList())
-					ShowMessage("Selected item(s) added to playlist \"%s\"!", playlist.c_str());
-			}
-		}
-		else if (pos > 1 && pos < w->Size()-1) // add items to existing playlist
-		{
-			std::string playlist = locale_to_utf_cpy(w->Current());
-			Mpd.StartCommandsList();
-			for (MPD::SongList::const_iterator it = list.begin(); it != list.end(); ++it)
-				Mpd.AddToPlaylist(playlist, **it);
-			if (Mpd.CommitCommandsList())
-				ShowMessage("Selected item(s) added to playlist \"%s\"!", w->Current().c_str());
-		}
-		if (pos != w->Size()-1)
-		{
-			// refresh playlist's lists
-			if (myBrowser->Main() && !myBrowser->isLocal() && myBrowser->CurrentDir() == "/")
-				myBrowser->GetDirectory("/");
-			if (myPlaylistEditor->Main())
-				myPlaylistEditor->Playlists->Clear(); // make playlist editor update itself
-		}
-	}
-	else
-	{
-		// disable adding after current track/album when stopped
-		if (pos > 1 && pos < 4 && !Mpd.isPlaying())
-		{
-			ShowMessage("Player is stopped!");
-			return;
-		}
-		
-		bool successful_operation;
-		if (pos == 0) // end of playlist
-		{
-			successful_operation = myPlaylist->Add(list, 0);
-		}
-		else if (pos == 1) // beginning of playlist
-		{
-			successful_operation = myPlaylist->Add(list, 0, 0);
-		}
-		else if (pos == 2) // after currently playing track
-		{
-			successful_operation = myPlaylist->Add(list, 0, Mpd.GetCurrentSongPos()+1);
-		}
-		else if (pos == 3) // after currently playing album
-		{
-			std::string album = myPlaylist->NowPlayingSong()->GetAlbum();
-			int i;
-			for (i = Mpd.GetCurrentSongPos()+1; i < int(myPlaylist->Items->Size()); ++i)
-				if ((*myPlaylist->Items)[i].GetAlbum() != album)
-					break;
-			successful_operation = myPlaylist->Add(list, 0, i);
-		}
-		else if (pos == 4) // after highlighted item
-		{
-			successful_operation = myPlaylist->Add(list, 0, std::min(myPlaylist->Items->Choice()+1, myPlaylist->Items->Size()));
-		}
-		else
-		{
-			w = itsPlaylistSelector;
-			return;
-		}
-		
-		if (successful_operation)
-			ShowMessage("Selected item(s) added!");
-	}
-	MPD::FreeSongList(list);
-	SwitchTo();
+	w->current().value().run();
 }
 
-void SelectedItemsAdder::MouseButtonPressed(MEVENT me)
+void SelectedItemsAdder::mouseButtonPressed(MEVENT me)
 {
-	if (w->Empty() || !w->hasCoords(me.x, me.y) || size_t(me.y) >= w->Size())
+	if (w->empty() || !w->hasCoords(me.x, me.y) || size_t(me.y) >= w->size())
 		return;
 	if (me.bstate & (BUTTON1_PRESSED | BUTTON3_PRESSED))
 	{
 		w->Goto(me.y);
 		if (me.bstate & BUTTON3_PRESSED)
-			EnterPressed();
+			enterPressed();
 	}
 	else
-		Screen< Menu<std::string> >::MouseButtonPressed(me);
+		Screen<WindowType>::mouseButtonPressed(me);
 }
 
-void SelectedItemsAdder::SetDimensions()
+void SelectedItemsAdder::populatePlaylistSelector(BaseScreen *old_screen)
 {
-	itsWidth = COLS*0.6;
-	itsHeight = std::min(size_t(LINES*0.6), MainHeight);
+	// stored playlists don't support songs from outside of mpd database
+	bool in_local_browser = old_screen == myBrowser && myBrowser->isLocal();
+
+	m_playlist_selector.reset();
+	m_playlist_selector.clear();
+	m_playlist_selector.addItem(Entry("Current playlist",
+		boost::bind(&Self::addToCurrentPlaylist, this)
+	));
+	if (!in_local_browser)
+	{
+		m_playlist_selector.addItem(Entry("New playlist",
+			boost::bind(&Self::addToNewPlaylist, this)
+		));
+	}
+	m_playlist_selector.addSeparator();
+	if (!in_local_browser)
+	{
+		size_t begin = m_playlist_selector.size();
+		Mpd.GetPlaylists([this](std::string playlist) {
+			m_playlist_selector.addItem(Entry(playlist,
+				boost::bind(&Self::addToExistingPlaylist, this, playlist)
+			));
+		});
+		std::sort(m_playlist_selector.beginV()+begin, m_playlist_selector.endV(),
+			LocaleBasedSorting(std::locale(), Config.ignore_leading_the));
+		if (begin < m_playlist_selector.size())
+			m_playlist_selector.addSeparator();
+	}
+	m_playlist_selector.addItem(Entry("Cancel",
+		boost::bind(&Self::cancel, this)
+	));
 }
 
+void SelectedItemsAdder::addToCurrentPlaylist()
+{
+	w = &m_position_selector;
+	m_position_selector.reset();
+}
+
+void SelectedItemsAdder::addToNewPlaylist() const
+{
+	Statusbar::lock();
+	Statusbar::put() << "Save playlist as: ";
+	std::string playlist = Global::wFooter->getString();
+	Statusbar::unlock();
+	if (!playlist.empty())
+		addToExistingPlaylist(playlist);
+}
+
+void SelectedItemsAdder::addToExistingPlaylist(const std::string &playlist) const
+{
+	Mpd.StartCommandsList();
+	for (auto s = m_selected_items.begin(); s != m_selected_items.end(); ++s)
+		Mpd.AddToPlaylist(playlist, *s);
+	Mpd.CommitCommandsList();
+	Statusbar::printf("Selected item(s) added to playlist \"%1%\"", playlist);
+	switchToPreviousScreen();
+}
+
+void SelectedItemsAdder::addAtTheEndOfPlaylist() const
+{
+	bool success = addSongsToPlaylist(m_selected_items.begin(), m_selected_items.end(), false, -1);
+	exitSuccessfully(success);
+}
+
+void SelectedItemsAdder::addAtTheBeginningOfPlaylist() const
+{
+	bool success = addSongsToPlaylist(m_selected_items.begin(), m_selected_items.end(), false, 0);
+	exitSuccessfully(success);
+}
+
+void SelectedItemsAdder::addAfterCurrentSong() const
+{
+	if (Status::State::player() == MPD::psStop)
+		return;
+	size_t pos = Status::State::currentSongPosition();
+	++pos;
+	bool success = addSongsToPlaylist(m_selected_items.begin(), m_selected_items.end(), false, pos);
+	exitSuccessfully(success);
+}
+
+void SelectedItemsAdder::addAfterCurrentAlbum() const
+{
+	if (Status::State::player() == MPD::psStop)
+		return;
+	auto &pl = myPlaylist->main();
+	size_t pos = Status::State::currentSongPosition();
+	withUnfilteredMenu(pl, [&pos, &pl]() {
+		std::string album =  pl[pos].value().getAlbum();
+		while (pos < pl.size() && pl[pos].value().getAlbum() == album)
+			++pos;
+	});
+	bool success = addSongsToPlaylist(m_selected_items.begin(), m_selected_items.end(), false, pos);
+	exitSuccessfully(success);
+}
+
+void SelectedItemsAdder::addAfterHighlightedSong() const
+{
+	size_t pos = myPlaylist->main().current().value().getPosition();
+	++pos;
+	bool success = addSongsToPlaylist(m_selected_items.begin(), m_selected_items.end(), false, pos);
+	exitSuccessfully(success);
+}
+
+void SelectedItemsAdder::cancel()
+{
+	if (isActiveWindow(m_playlist_selector))
+		switchToPreviousScreen();
+	else if (isActiveWindow(m_position_selector))
+		w = &m_playlist_selector;
+}
+
+void SelectedItemsAdder::exitSuccessfully(bool success) const
+{
+	Statusbar::printf("Selected items added%1%", withErrors(success));
+	switchToPreviousScreen();
+}
+
+void SelectedItemsAdder::setDimensions()
+{
+	using Global::MainHeight;
+	
+	m_playlist_selector_width = COLS*0.6;
+	m_playlist_selector_height = std::min(MainHeight, size_t(LINES*0.66));
+	
+	m_position_selector_width = std::min(size_t(35), size_t(COLS));
+	m_position_selector_height = std::min(size_t(11), MainHeight);
+}

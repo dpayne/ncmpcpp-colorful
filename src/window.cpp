@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -19,7 +19,11 @@
  ***************************************************************************/
 
 #include <cstring>
+#include <cstdio>
 #include <cstdlib>
+#include <iostream>
+#include <readline/history.h>
+#include <readline/readline.h>
 
 #ifdef WIN32
 # include <winsock.h>
@@ -29,11 +33,323 @@
 #endif
 
 #include "error.h"
+#include "utility/string.h"
+#include "utility/wide_string.h"
 #include "window.h"
 
-using namespace NCurses;
+namespace {
+namespace rl {
 
-void NCurses::InitScreen(GNUC_UNUSED const char *window_title, bool enable_colors)
+NC::Window *w;
+size_t start_x;
+size_t start_y;
+size_t width;
+bool encrypted;
+const char *base;
+
+int read_key(FILE *)
+{
+	size_t x;
+	bool done;
+	int result;
+	do
+	{
+		x = w->getX();
+		if (w->runGetStringHelper(rl_line_buffer, &done))
+		{
+			if (done)
+			{
+				rl_done = 1;
+				return 0;
+			}
+			w->goToXY(x, start_y);
+		}
+		w->refresh();
+		result = w->readKey();
+		if (!w->FDCallbacksListEmpty())
+		{
+			w->goToXY(x, start_y);
+			w->refresh();
+		}
+	}
+	while (result == ERR);
+	return result;
+}
+
+void display_string()
+{
+	auto print_char = [](wchar_t wc) {
+		if (encrypted)
+			*w << '*';
+		else
+			*w << wc;
+	};
+	auto print_string = [](wchar_t *ws, size_t len) {
+		if (encrypted)
+			for (size_t i = 0; i < len; ++i)
+				*w << '*';
+		else
+			*w << ws;
+	};
+
+	char pt = rl_line_buffer[rl_point];
+	rl_line_buffer[rl_point] = 0;
+	wchar_t pre_pos[rl_point+1];
+	pre_pos[mbstowcs(pre_pos, rl_line_buffer, rl_point)] = 0;
+	rl_line_buffer[rl_point] = pt;
+
+	int pos = wcswidth(pre_pos, rl_point);
+	if (pos < 0)
+		pos = rl_point;
+
+	mvwhline(w->raw(), start_y, start_x, ' ', width+1);
+	w->goToXY(start_x, start_y);
+	if (size_t(pos) <= width)
+	{
+		print_string(pre_pos, pos);
+
+		wchar_t post_pos[rl_end-rl_point+1];
+		post_pos[mbstowcs(post_pos, rl_line_buffer+rl_point, rl_end-rl_point)] = 0;
+
+		size_t cpos = pos;
+		for (wchar_t *c = post_pos; *c != 0; ++c)
+		{
+			int n = wcwidth(*c);
+			if (n < 0)
+			{
+				print_char(L'.');
+				++cpos;
+			}
+			else
+			{
+				if (cpos+n > width)
+					break;
+				cpos += n;
+				print_char(*c);
+			}
+		}
+	}
+	else
+	{
+		wchar_t *mod_pre_pos = pre_pos;
+		while (*mod_pre_pos != 0)
+		{
+			++mod_pre_pos;
+			int n = wcwidth(*mod_pre_pos);
+			if (n < 0)
+				--pos;
+			else
+				pos -= n;
+			if (size_t(pos) <= width)
+				break;
+		}
+		print_string(mod_pre_pos, pos);
+	}
+	w->goToXY(start_x+pos, start_y);
+}
+
+int add_base()
+{
+	rl_insert_text(base);
+	return 0;
+}
+
+}
+}
+
+namespace NC {//
+
+std::ostream &operator<<(std::ostream &os, Color c)
+{
+	switch (c)
+	{
+		case Color::Default:
+			os << "default";
+			break;
+		case Color::Black:
+			os << "black";
+			break;
+		case Color::Red:
+			os << "red";
+			break;
+		case Color::Green:
+			os << "green";
+			break;
+		case Color::Yellow:
+			os << "yellow";
+			break;
+		case Color::Blue:
+			os << "blue";
+			break;
+		case Color::Magenta:
+			os << "magenta";
+			break;
+		case Color::Cyan:
+			os << "cyan";
+			break;
+		case Color::White:
+			os << "white";
+			break;
+		case Color::End:
+			os << "color_end";
+			break;
+	}
+	return os;
+}
+
+std::istream &operator>>(std::istream &is, Color &c)
+{
+	std::string sc;
+	is >> sc;
+	if (sc == "default")
+		c = Color::Default;
+	else if (sc == "black")
+		c = Color::Black;
+	else if (sc == "red")
+		c = Color::Red;
+	else if (sc == "green")
+		c = Color::Green;
+	else if (sc == "yellow")
+		c = Color::Yellow;
+	else if (sc == "blue")
+		c = Color::Blue;
+	else if (sc == "magenta")
+		c = Color::Magenta;
+	else if (sc == "cyan")
+		c = Color::Cyan;
+	else if (sc == "white")
+		c = Color::White;
+	else if (sc == "color_end")
+		c = Color::End;
+	else
+		is.setstate(std::ios::failbit);
+	return is;
+}
+
+std::ostream &operator<<(std::ostream &os, Format f)
+{
+	switch (f)
+	{
+		case Format::None:
+			os << "none";
+			break;
+		case Format::Bold:
+			os << "bold";
+			break;
+		case Format::NoBold:
+			os << "bold";
+			break;
+		case Format::Underline:
+			os << "underline";
+			break;
+		case Format::NoUnderline:
+			os << "no_underline";
+			break;
+		case Format::Reverse:
+			os << "reverse";
+			break;
+		case Format::NoReverse:
+			os << "no_reverse";
+			break;
+		case Format::AltCharset:
+			os << "alt_charset";
+			break;
+		case Format::NoAltCharset:
+			os << "no_alt_charset";
+			break;
+	}
+	return os;
+}
+
+std::ostream &operator<<(std::ostream &os, Border b)
+{
+	switch (b)
+	{
+		case Border::None:
+			os << "none";
+			break;
+		case Border::Black:
+			os << "black";
+			break;
+		case Border::Red:
+			os << "red";
+			break;
+		case Border::Green:
+			os << "green";
+			break;
+		case Border::Yellow:
+			os << "yellow";
+			break;
+		case Border::Blue:
+			os << "blue";
+			break;
+		case Border::Magenta:
+			os << "magenta";
+			break;
+		case Border::Cyan:
+			os << "cyan";
+			break;
+		case Border::White:
+			os << "white";
+			break;
+	}
+	return os;
+}
+
+std::istream &operator>>(std::istream &is, Border &b)
+{
+	std::string sb;
+	is >> sb;
+	if (sb == "none")
+		b = Border::None;
+	else if (sb == "black")
+		b = Border::Black;
+	else if (sb == "red")
+		b = Border::Red;
+	else if (sb == "green")
+		b = Border::Green;
+	else if (sb == "yellow")
+		b = Border::Yellow;
+	else if (sb == "blue")
+		b = Border::Blue;
+	else if (sb == "magenta")
+		b = Border::Magenta;
+	else if (sb == "cyan")
+		b = Border::Cyan;
+	else if (sb == "white")
+		b = Border::White;
+	else
+		is.setstate(std::ios::failbit);
+	return is;
+}
+
+std::ostream &operator<<(std::ostream &os, Scroll s)
+{
+	switch (s)
+	{
+		case Scroll::Up:
+			os << "scroll_up";
+			break;
+		case Scroll::Down:
+			os << "scroll_down";
+			break;
+		case Scroll::PageUp:
+			os << "scroll_page_up";
+			break;
+		case Scroll::PageDown:
+			os << "scroll_page_down";
+			break;
+		case Scroll::Home:
+			os << "scroll_home";
+			break;
+		case Scroll::End:
+			os << "scroll_end";
+			break;
+	}
+	return os;
+}
+
+void initScreen(GNUC_UNUSED const char *window_title, bool enable_colors)
 {
 	const int ColorsTable[] =
 	{
@@ -59,12 +375,26 @@ void NCurses::InitScreen(GNUC_UNUSED const char *window_title, bool enable_color
 			for (int j = 0; j < 8; ++j)
 				init_pair(num++, ColorsTable[j], i < 0 ? i : ColorsTable[i]);
 	}
+	raw();
+	nonl();
 	noecho();
-	cbreak();
 	curs_set(0);
+
+	rl_initialize();
+	// disable autocompletion
+	rl_attempted_completion_function = [](const char *, int, int) -> char ** {
+		rl_attempted_completion_over = 1;
+		return nullptr;
+	};
+	// do not catch signals
+	rl_catch_signals = 0;
+	// overwrite readline callbacks
+	rl_getc_function = rl::read_key;
+	rl_redisplay_function = rl::display_string;
+	rl_startup_hook = rl::add_base;
 }
 
-void NCurses::DestroyScreen()
+void destroyScreen()
 {
 	curs_set(1);
 	endwin();
@@ -77,302 +407,345 @@ Window::Window(size_t startx,
 		const std::string &title,
 		Color color,
 		Border border)
-		: itsWindow(0),
-		itsWinBorder(0),
-		itsStartX(startx),
-		itsStartY(starty),
-		itsWidth(width),
-		itsHeight(height),
-		itsWindowTimeout(-1),
-		itsColor(color),
-		itsBgColor(clDefault),
-		itsBaseColor(color),
-		itsBaseBgColor(clDefault),
-		itsBorder(border),
-		itsGetStringHelper(0),
-		itsX(0),
-		itsY(0),
-		itsTitle(title),
-		itsHistory(0),
-		itsBoldCounter(0),
-		itsUnderlineCounter(0),
-		itsReverseCounter(0),
-		itsAltCharsetCounter(0)
+		: m_window(0),
+		m_border_window(0),
+		m_start_x(startx),
+		m_start_y(starty),
+		m_width(width),
+		m_height(height),
+		m_window_timeout(-1),
+		m_color(color),
+		m_bg_color(Color::Default),
+		m_base_color(color),
+		m_base_bg_color(Color::Default),
+		m_border(border),
+		m_get_string_helper(0),
+		m_title(title),
+		m_bold_counter(0),
+		m_underline_counter(0),
+		m_reverse_counter(0),
+		m_alt_charset_counter(0)
 {
-	if (itsStartX > size_t(COLS)
-	||  itsStartY > size_t(LINES)
-	||  itsWidth+itsStartX > size_t(COLS)
-	||  itsHeight+itsStartY > size_t(LINES))
-		FatalError("Constructed window is bigger than terminal size!");
-
-	if (itsBorder != brNone)
+	if (m_start_x > size_t(COLS)
+	||  m_start_y > size_t(LINES)
+	||  m_width+m_start_x > size_t(COLS)
+	||  m_height+m_start_y > size_t(LINES))
+		FatalError("Constructed window is bigger than terminal size");
+	
+	if (m_border != Border::None)
 	{
-		itsWinBorder = newpad(itsHeight, itsWidth);
-		wattron(itsWinBorder, COLOR_PAIR(itsBorder));
-		box(itsWinBorder, 0, 0);
-		itsStartX++;
-		itsStartY++;
-		itsWidth -= 2;
-		itsHeight -= 2;
+		m_border_window = newpad(m_height, m_width);
+		wattron(m_border_window, COLOR_PAIR(int(m_border)));
+		box(m_border_window, 0, 0);
+		m_start_x++;
+		m_start_y++;
+		m_width -= 2;
+		m_height -= 2;
 	}
-	if (!itsTitle.empty())
+	if (!m_title.empty())
 	{
-		itsStartY += 2;
-		itsHeight -= 2;
+		m_start_y += 2;
+		m_height -= 2;
 	}
-
-	itsWindow = newpad(itsHeight, itsWidth);
-
-	SetColor(itsColor);
-	keypad(itsWindow, 1);
+	
+	m_window = newpad(m_height, m_width);
+	
+	setColor(m_color);
+	keypad(m_window, 1);
 }
 
-Window::Window(const Window &w) : itsWindow(dupwin(w.itsWindow)),
-				itsWinBorder(dupwin(w.itsWinBorder)),
-				itsStartX(w.itsStartX),
-				itsStartY(w.itsStartY),
-				itsWidth(w.itsWidth),
-				itsHeight(w.itsHeight),
-				itsWindowTimeout(w.itsWindowTimeout),
-				itsColor(w.itsColor),
-				itsBgColor(w.itsBgColor),
-				itsBaseColor(w.itsBaseColor),
-				itsBaseBgColor(w.itsBaseBgColor),
-				itsBorder(w.itsBorder),
-				itsGetStringHelper(w.itsGetStringHelper),
-				itsX(w.itsX),
-				itsY(w.itsY),
-				itsTitle(w.itsTitle),
-				itsColors(w.itsColors),
-				itsHistory(w.itsHistory),
-				itsBoldCounter(w.itsBoldCounter),
-				itsUnderlineCounter(w.itsUnderlineCounter),
-				itsReverseCounter(w.itsReverseCounter),
-				itsAltCharsetCounter(w.itsAltCharsetCounter)
+Window::Window(const Window &rhs)
+: m_window(dupwin(rhs.m_window))
+, m_border_window(dupwin(rhs.m_border_window))
+, m_start_x(rhs.m_start_x)
+, m_start_y(rhs.m_start_y)
+, m_width(rhs.m_width)
+, m_height(rhs.m_height)
+, m_window_timeout(rhs.m_window_timeout)
+, m_color(rhs.m_color)
+, m_bg_color(rhs.m_bg_color)
+, m_base_color(rhs.m_base_color)
+, m_base_bg_color(rhs.m_base_bg_color)
+, m_border(rhs.m_border)
+, m_get_string_helper(rhs.m_get_string_helper)
+, m_title(rhs.m_title)
+, m_color_stack(rhs.m_color_stack)
+, m_input_queue(rhs.m_input_queue)
+, m_fds(rhs.m_fds)
+, m_bold_counter(rhs.m_bold_counter)
+, m_underline_counter(rhs.m_underline_counter)
+, m_reverse_counter(rhs.m_reverse_counter)
+, m_alt_charset_counter(rhs.m_alt_charset_counter)
 {
+}
+
+Window::Window(Window &&rhs)
+: m_window(rhs.m_window)
+, m_border_window(rhs.m_border_window)
+, m_start_x(rhs.m_start_x)
+, m_start_y(rhs.m_start_y)
+, m_width(rhs.m_width)
+, m_height(rhs.m_height)
+, m_window_timeout(rhs.m_window_timeout)
+, m_color(rhs.m_color)
+, m_bg_color(rhs.m_bg_color)
+, m_base_color(rhs.m_base_color)
+, m_base_bg_color(rhs.m_base_bg_color)
+, m_border(rhs.m_border)
+, m_get_string_helper(rhs.m_get_string_helper)
+, m_title(std::move(rhs.m_title))
+, m_color_stack(std::move(rhs.m_color_stack))
+, m_input_queue(std::move(rhs.m_input_queue))
+, m_fds(std::move(rhs.m_fds))
+, m_bold_counter(rhs.m_bold_counter)
+, m_underline_counter(rhs.m_underline_counter)
+, m_reverse_counter(rhs.m_reverse_counter)
+, m_alt_charset_counter(rhs.m_alt_charset_counter)
+{
+	rhs.m_window = 0;
+	rhs.m_border_window = 0;
+}
+
+Window &Window::operator=(Window rhs)
+{
+	std::swap(m_window, rhs.m_window);
+	std::swap(m_border_window, rhs.m_border_window);
+	std::swap(m_start_x, rhs.m_start_x);
+	std::swap(m_start_y, rhs.m_start_y);
+	std::swap(m_width, rhs.m_width);
+	std::swap(m_height, rhs.m_height);
+	std::swap(m_window_timeout, rhs.m_window_timeout);
+	std::swap(m_color, rhs.m_color);
+	std::swap(m_bg_color, rhs.m_bg_color);
+	std::swap(m_base_color, rhs.m_base_color);
+	std::swap(m_base_bg_color, rhs.m_base_bg_color);
+	std::swap(m_border, rhs.m_border);
+	std::swap(m_get_string_helper, rhs.m_get_string_helper);
+	std::swap(m_title, rhs.m_title);
+	std::swap(m_color_stack, rhs.m_color_stack);
+	std::swap(m_input_queue, rhs.m_input_queue);
+	std::swap(m_fds, rhs.m_fds);
+	std::swap(m_bold_counter, rhs.m_bold_counter);
+	std::swap(m_underline_counter, rhs.m_underline_counter);
+	std::swap(m_reverse_counter, rhs.m_reverse_counter);
+	std::swap(m_alt_charset_counter, rhs.m_alt_charset_counter);
+	return *this;
 }
 
 Window::~Window()
 {
-	delwin(itsWindow);
-	delwin(itsWinBorder);
+	delwin(m_window);
+	delwin(m_border_window);
 }
 
-void Window::SetColor(Color fg, Color bg)
+void Window::setColor(Color fg, Color bg)
 {
-	if (fg == clDefault)
-		fg = itsBaseColor;
-
-	if (fg != clDefault)
-		wattron(itsWindow, COLOR_PAIR(bg*8+fg));
+	if (fg == Color::Default)
+		fg = m_base_color;
+	
+	if (fg != Color::Default)
+		wattron(m_window, COLOR_PAIR(int(bg)*8+int(fg)));
 	else
-		wattroff(itsWindow, COLOR_PAIR(itsColor));
-	itsColor = fg;
-	itsBgColor = bg;
+		wattroff(m_window, COLOR_PAIR(int(m_color)));
+	m_color = fg;
+	m_bg_color = bg;
 }
 
-void Window::SetBaseColor(Color fg, Color bg)
+void Window::setBaseColor(Color fg, Color bg)
 {
-	itsBaseColor = fg;
-	itsBaseBgColor = bg;
+	m_base_color = fg;
+	m_base_bg_color = bg;
 }
 
-void Window::SetBorder(Border border)
+void Window::setBorder(Border border)
 {
-	if (border == brNone && itsBorder != brNone)
+	if (border == Border::None && m_border != Border::None)
 	{
-		delwin(itsWinBorder);
-		itsStartX--;
-		itsStartY--;
-		itsHeight += 2;
-		itsWidth += 2;
-		Recreate(itsWidth, itsHeight);
+		delwin(m_border_window);
+		m_start_x--;
+		m_start_y--;
+		m_height += 2;
+		m_width += 2;
+		recreate(m_width, m_height);
 	}
-	else if (border != brNone && itsBorder == brNone)
+	else if (border != Border::None && m_border == Border::None)
 	{
-		itsWinBorder = newpad(itsHeight, itsWidth);
-		wattron(itsWinBorder, COLOR_PAIR(border));
-		box(itsWinBorder,0,0);
-		itsStartX++;
-		itsStartY++;
-		itsHeight -= 2;
-		itsWidth -= 2;
-		Recreate(itsWidth, itsHeight);
+		m_border_window = newpad(m_height, m_width);
+		wattron(m_border_window, COLOR_PAIR(int(border)));
+		box(m_border_window,0,0);
+		m_start_x++;
+		m_start_y++;
+		m_height -= 2;
+		m_width -= 2;
+		recreate(m_width, m_height);
 	}
 	else
 	{
-		wattron(itsWinBorder,COLOR_PAIR(border));
-		box(itsWinBorder, 0, 0);
+		wattron(m_border_window,COLOR_PAIR(int(border)));
+		box(m_border_window, 0, 0);
 	}
-	itsBorder = border;
+	m_border = border;
 }
 
-void Window::SetTitle(const std::string &new_title)
+void Window::setTitle(const std::string &new_title)
 {
-	if (itsTitle == new_title)
+	if (m_title == new_title)
 	{
 		return;
 	}
-	else if (!new_title.empty() && itsTitle.empty())
+	else if (!new_title.empty() && m_title.empty())
 	{
-		itsStartY += 2;
-		itsHeight -= 2;
-		Recreate(itsWidth, itsHeight);
+		m_start_y += 2;
+		m_height -= 2;
+		recreate(m_width, m_height);
 	}
-	else if (new_title.empty() && !itsTitle.empty())
+	else if (new_title.empty() && !m_title.empty())
 	{
-		itsStartY -= 2;
-		itsHeight += 2;
-		Recreate(itsWidth, itsHeight);
+		m_start_y -= 2;
+		m_height += 2;
+		recreate(m_width, m_height);
 	}
-	itsTitle = new_title;
+	m_title = new_title;
 }
 
-void Window::CreateHistory()
+void Window::recreate(size_t width, size_t height)
 {
-	if (!itsHistory)
-		itsHistory = new std::list<std::wstring>;
+	delwin(m_window);
+	m_window = newpad(height, width);
+	setTimeout(m_window_timeout);
+	setColor(m_color, m_bg_color);
+	keypad(m_window, 1);
 }
 
-void Window::DeleteHistory()
+void Window::moveTo(size_t new_x, size_t new_y)
 {
-	delete itsHistory;
-	itsHistory = 0;
-}
-
-void Window::Recreate(size_t width, size_t height)
-{
-	delwin(itsWindow);
-	itsWindow = newpad(height, width);
-	SetTimeout(itsWindowTimeout);
-	SetColor(itsColor, itsBgColor);
-	keypad(itsWindow, 1);
-}
-
-void Window::MoveTo(size_t new_x, size_t new_y)
-{
-	itsStartX = new_x;
-	itsStartY = new_y;
-	if (itsBorder != brNone)
+	m_start_x = new_x;
+	m_start_y = new_y;
+	if (m_border != Border::None)
 	{
-		itsStartX++;
-		itsStartY++;
+		m_start_x++;
+		m_start_y++;
 	}
-	if (!itsTitle.empty())
-		itsStartY += 2;
+	if (!m_title.empty())
+		m_start_y += 2;
 }
 
-void Window::AdjustDimensions(size_t width, size_t height)
+void Window::adjustDimensions(size_t width, size_t height)
 {
-	if (itsBorder != brNone)
+	if (m_border != Border::None)
 	{
-		delwin(itsWinBorder);
-		itsWinBorder = newpad(height, width);
-		wattron(itsWinBorder, COLOR_PAIR(itsBorder));
-		box(itsWinBorder, 0, 0);
+		delwin(m_border_window);
+		m_border_window = newpad(height, width);
+		wattron(m_border_window, COLOR_PAIR(int(m_border)));
+		box(m_border_window, 0, 0);
 		width -= 2;
 		height -= 2;
 	}
-	if (!itsTitle.empty())
+	if (!m_title.empty())
 		height -= 2;
-	itsHeight = height;
-	itsWidth = width;
+	m_height = height;
+	m_width = width;
 }
 
-void Window::Resize(size_t new_width, size_t new_height)
+void Window::resize(size_t new_width, size_t new_height)
 {
-	AdjustDimensions(new_width, new_height);
-	Recreate(itsWidth, itsHeight);
+	adjustDimensions(new_width, new_height);
+	recreate(m_width, m_height);
 }
 
-void Window::ShowBorder() const
+void Window::showBorder() const
 {
-	if (itsBorder != brNone)
+	if (m_border != Border::None)
 	{
-		refresh();
-		prefresh(itsWinBorder, 0, 0, GetStartY(), GetStartX(), itsStartY+itsHeight, itsStartX+itsWidth);
+		::refresh();
+		prefresh(m_border_window, 0, 0, getStarty(), getStartX(), m_start_y+m_height, m_start_x+m_width);
 	}
-	if (!itsTitle.empty())
+	if (!m_title.empty())
 	{
-		if (itsBorder != brNone)
-			attron(COLOR_PAIR(itsBorder));
+		if (m_border != Border::None)
+			attron(COLOR_PAIR(int(m_border)));
 		else
-			attron(COLOR_PAIR(itsBaseColor));
-		mvhline(itsStartY-1, itsStartX, 0, itsWidth);
+			attron(COLOR_PAIR(int(m_base_color)));
+		mvhline(m_start_y-1, m_start_x, 0, m_width);
 		attron(A_BOLD);
-		mvhline(itsStartY-2, itsStartX, 32, itsWidth); // clear title line
-		mvaddstr(itsStartY-2, itsStartX, itsTitle.c_str());
-		attroff(COLOR_PAIR(itsBorder) | A_BOLD);
+		mvhline(m_start_y-2, m_start_x, 32, m_width); // clear title line
+		mvaddstr(m_start_y-2, m_start_x, m_title.c_str());
+		attroff(COLOR_PAIR(int(m_border)) | A_BOLD);
 	}
+	::refresh();
+}
+
+void Window::display()
+{
+	showBorder();
 	refresh();
 }
 
-void Window::Display()
+void Window::refresh()
 {
-	ShowBorder();
-	Refresh();
+	prefresh(m_window, 0, 0, m_start_y, m_start_x, m_start_y+m_height-1, m_start_x+m_width-1);
 }
 
-void Window::Refresh()
+void Window::clear()
 {
-	prefresh(itsWindow, 0, 0, itsStartY, itsStartX, itsStartY+itsHeight-1, itsStartX+itsWidth-1);
+	werase(m_window);
 }
 
-void Window::Clear()
+void Window::bold(bool bold_state) const
 {
-	werase(itsWindow);
+	(bold_state ? wattron : wattroff)(m_window, A_BOLD);
 }
 
-void Window::Hide(char ch) const
+void Window::underline(bool underline_state) const
 {
-	for (size_t i = 0; i < GetHeight(); ++i)
-		mvhline(i+GetStartY(), GetStartX(), ch, GetWidth());
-	refresh();
+	(underline_state ? wattron : wattroff)(m_window, A_UNDERLINE);
 }
 
-void Window::Bold(bool bold_state) const
+void Window::reverse(bool reverse_state) const
 {
-	(bold_state ? wattron : wattroff)(itsWindow, A_BOLD);
+	(reverse_state ? wattron : wattroff)(m_window, A_REVERSE);
 }
 
-void Window::Underline(bool underline_state) const
+void Window::altCharset(bool altcharset_state) const
 {
-	(underline_state ? wattron : wattroff)(itsWindow, A_UNDERLINE);
+	(altcharset_state ? wattron : wattroff)(m_window, A_ALTCHARSET);
 }
 
-void Window::Reverse(bool reverse_state) const
+void Window::setTimeout(int timeout)
 {
-	(reverse_state ? wattron : wattroff)(itsWindow, A_REVERSE);
+	if (timeout != m_window_timeout)
+	{
+		m_window_timeout = timeout;
+		wtimeout(m_window, timeout);
+	}
 }
 
-void Window::AltCharset(bool altcharset_state) const
+void Window::addFDCallback(int fd, void (*callback)())
 {
-	(altcharset_state ? wattron : wattroff)(itsWindow, A_ALTCHARSET);
+	m_fds.push_back(std::make_pair(fd, callback));
 }
 
-void Window::SetTimeout(int timeout)
+void Window::clearFDCallbacksList()
 {
-	itsWindowTimeout = timeout;
-	wtimeout(itsWindow, timeout);
-}
-
-void Window::AddFDCallback(int fd, void (*callback)())
-{
-	itsFDs.push_back(std::make_pair(fd, callback));
-}
-
-void Window::ClearFDCallbacksList()
-{
-	itsFDs.clear();
+	m_fds.clear();
 }
 
 bool Window::FDCallbacksListEmpty() const
 {
-	return itsFDs.empty();
+	return m_fds.empty();
 }
 
-void Window::ReadKey(int &read_key) const
+int Window::readKey()
 {
+	int result;
+	// if there are characters in input queue, get them and
+	// return immediately.
+	if (!m_input_queue.empty())
+	{
+		result = m_input_queue.front();
+		m_input_queue.pop();
+		return result;
+	}
 	// in pdcurses polling stdin doesn't work, so we can't poll
 	// both stdin and other file descriptors in one select. the
 	// workaround is to set the timeout of select to 0, poll
@@ -380,404 +753,219 @@ void Window::ReadKey(int &read_key) const
 	// the given timeout. unfortunately, this results in delays
 	// since ncmpcpp doesn't see that data arrived while waiting
 	// for input from stdin, but it seems there is no better option.
-
+	
 	fd_set fdset;
 	FD_ZERO(&fdset);
 #	if !defined(USE_PDCURSES)
 	FD_SET(STDIN_FILENO, &fdset);
-	timeval timeout = { itsWindowTimeout/1000, (itsWindowTimeout%1000)*1000 };
+	timeval timeout = { m_window_timeout/1000, (m_window_timeout%1000)*1000 };
 #	else
 	timeval timeout = { 0, 0 };
 #	endif
-
+	
 	int fd_max = STDIN_FILENO;
-	for (FDCallbacks::const_iterator it = itsFDs.begin(); it != itsFDs.end(); ++it)
+	for (FDCallbacks::const_iterator it = m_fds.begin(); it != m_fds.end(); ++it)
 	{
 		if (it->first > fd_max)
 			fd_max = it->first;
 		FD_SET(it->first, &fdset);
 	}
-
-	if (select(fd_max+1, &fdset, 0, 0, itsWindowTimeout < 0 ? 0 : &timeout) > 0)
+	
+	if (select(fd_max+1, &fdset, 0, 0, m_window_timeout < 0 ? 0 : &timeout) > 0)
 	{
 #		if !defined(USE_PDCURSES)
-		read_key = FD_ISSET(STDIN_FILENO, &fdset) ? wgetch(itsWindow) : ERR;
+		result = FD_ISSET(STDIN_FILENO, &fdset) ? wgetch(m_window) : ERR;
 #		endif // !USE_PDCURSES
-		for (FDCallbacks::const_iterator it = itsFDs.begin(); it != itsFDs.end(); ++it)
+		for (FDCallbacks::const_iterator it = m_fds.begin(); it != m_fds.end(); ++it)
 			if (FD_ISSET(it->first, &fdset))
 				it->second();
 	}
 #	if !defined(USE_PDCURSES)
 	else
-		read_key = ERR;
+		result = ERR;
 #	else
-	read_key = wgetch(itsWindow);
+	result = wgetch(m_window);
 #	endif
+	return result;
 }
 
-void Window::ReadKey() const
+void Window::pushChar(int ch)
 {
-	wgetch(itsWindow);
+	m_input_queue.push(ch);
 }
 
-std::string Window::GetString(const std::string &base, size_t length, size_t width, bool encrypted) const
+std::string Window::getString(const std::string &base, size_t width, bool encrypted)
 {
-	int input;
-	size_t beginning, maxbeginning, minx, x, real_x, y, maxx, real_maxx;
-
-	getyx(itsWindow, y, x);
-	minx = real_maxx = maxx = real_x = x;
+	rl::w = this;
+	getyx(m_window, rl::start_y, rl::start_x);
+	rl::width = width;
+	rl::encrypted = encrypted;
+	rl::base = base.c_str();
 
 	width--;
 	if (width == size_t(-1))
-		width = itsWidth-x-1;
+		rl::width = m_width-rl::start_x-1;
+	else
+		rl::width = width;
+
+	mmask_t oldmask;
+	std::string result;
 
 	curs_set(1);
-
-	std::wstring wbase = ToWString(base);
-	std::wstring *tmp = &wbase;
-	std::list<std::wstring>::iterator history_it = itsHistory->end();
-
-	std::string tmp_in;
-	wchar_t wc_in;
-	bool gotoend = 1;
-	bool block_scrolling = 0;
-
-	// disable scrolling if wide chars are used
-	for (std::wstring::const_iterator it = tmp->begin(); it != tmp->end(); ++it)
-		if (wcwidth(*it) > 1)
-			block_scrolling = 1;
-
-	beginning = -1;
-
-	do
-	{
-		if (tmp->empty())
-			block_scrolling = 0;
-
-		maxbeginning = block_scrolling ? 0 : (tmp->length() < width ? 0 : tmp->length()-width);
-		maxx = minx + (Length(*tmp) < width ? Length(*tmp) : width);
-
-		real_maxx = minx + (tmp->length() < width ? tmp->length() : width);
-
-		if (beginning > maxbeginning)
-			beginning = maxbeginning;
-
-		if (gotoend)
-		{
-			size_t real_real_maxx = minx;
-			size_t biggest_x = minx+width;
-
-			if (block_scrolling && maxx >= biggest_x)
-			{
-				size_t i = 0;
-				for (std::wstring::const_iterator it = tmp->begin(); i < width; ++it, ++real_real_maxx)
-					i += wcwidth(*it);
-			}
-			else
-				real_real_maxx = real_maxx;
-
-			real_x = real_real_maxx;
-			x = block_scrolling ? (maxx > biggest_x ? biggest_x : maxx) : maxx;
-			beginning = maxbeginning;
-			gotoend = 0;
-		}
-
-		mvwhline(itsWindow, y, minx, 32, width+1);
-
-		if (!encrypted)
-			mvwprintw(itsWindow, y, minx, "%ls", tmp->substr(beginning, width+1).c_str());
-		else
-			mvwhline(itsWindow, y, minx, '*', maxx-minx);
-
-		if (itsGetStringHelper)
-			itsGetStringHelper(*tmp);
-
-		wmove(itsWindow, y, x);
-		prefresh(itsWindow, 0, 0, itsStartY, itsStartX, itsStartY+itsHeight-1, itsStartX+itsWidth-1);
-		ReadKey(input);
-
-		// these key codes are special and should be ignored
-		if ((input < 10 || (input > 10 && input != 21 && input < 32))
-#		ifdef USE_PDCURSES
-		&&   input != KEY_BACKSPACE)
-#		else
-		)
-#		endif // USE_PDCURSES
-			continue;
-
-		switch (input)
-		{
-			case ERR:
-			case KEY_MOUSE:
-				break;
-			case KEY_UP:
-				if (itsHistory && !encrypted && history_it != itsHistory->begin())
-				{
-					while (--history_it != itsHistory->begin())
-						if (!history_it->empty())
-							break;
-					tmp = &*history_it;
-					gotoend = 1;
-				}
-				break;
-			case KEY_DOWN:
-				if (itsHistory && !encrypted && history_it != itsHistory->end())
-				{
-					while (++history_it != itsHistory->end())
-						if (!history_it->empty())
-							break;
-					tmp = &(history_it == itsHistory->end() ? wbase : *history_it);
-					gotoend = 1;
-				}
-				break;
-			case KEY_RIGHT:
-			{
-				if (x < maxx)
-				{
-					real_x++;
-					x += std::max(wcwidth((*tmp)[beginning+real_x-minx-1]), 1);
-				}
-				else if (beginning < maxbeginning)
-					beginning++;
-				break;
-			}
-			case KEY_BACKSPACE: case 127:
-			{
-				if (x <= minx && !beginning)
-					break;
-			}
-			case KEY_LEFT:
-			{
-				if (x > minx)
-				{
-					real_x--;
-					x -= std::max(wcwidth((*tmp)[beginning+real_x-minx]), 1);
-				}
-				else if (beginning > 0)
-					beginning--;
-				if (input != KEY_BACKSPACE && input != 127)
-					break; // backspace = left & delete.
-			}
-			case KEY_DC:
-			{
-				if ((real_x-minx)+beginning == tmp->length())
-					break;
-				tmp->erase(tmp->begin()+(real_x-minx)+beginning);
-				if (beginning && beginning == maxbeginning && real_x < maxx)
-				{
-					real_x++;
-					x++;
-				}
-				break;
-			}
-			case KEY_HOME:
-			{
-				real_x = x = minx;
-				beginning = 0;
-				break;
-			}
-			case KEY_END:
-			{
-				gotoend = 1;
-				break;
-			}
-			case 10:
-				break;
-			case 21: // CTRL+U
-				tmp->clear();
-				real_maxx = maxx = real_x = x = minx;
-				maxbeginning = beginning = 0;
-				break;
-			default:
-			{
-				if (tmp->length() >= length)
-					break;
-
-				tmp_in += input;
-				if (int(mbrtowc(&wc_in, tmp_in.c_str(), MB_CUR_MAX, 0)) < 0)
-					break;
-
-				if (wcwidth(wc_in) > 1)
-					block_scrolling = 1;
-
-				if ((real_x-minx)+beginning >= tmp->length())
-				{
-					tmp->push_back(wc_in);
-					if (!beginning)
-					{
-						real_x++;
-						x += wcwidth(wc_in);
-					}
-					beginning++;
-					gotoend = 1;
-				}
-				else
-				{
-					tmp->insert(tmp->begin()+(real_x-minx)+beginning, wc_in);
-					if (x < maxx)
-					{
-						real_x++;
-						x += wcwidth(wc_in);
-					}
-					else if (beginning < maxbeginning)
-						beginning++;
-				}
-				tmp_in.clear();
-			}
-		}
-	}
-	while (input != 10);
+	keypad(m_window, 0);
+	mousemask(0, &oldmask);
+	char *input = readline(nullptr);
+	mousemask(oldmask, nullptr);
+	keypad(m_window, 1);
 	curs_set(0);
-
-	if (itsHistory && !encrypted)
+	if (input != nullptr)
 	{
-		if (history_it != itsHistory->end())
-		{
-			itsHistory->push_back(*history_it);
-			tmp = &itsHistory->back();
-			itsHistory->erase(history_it);
-		}
-		else
-			itsHistory->push_back(*tmp);
+		if (input[0] != 0)
+			add_history(input);
+		result = input;
+		free(input);
 	}
 
-	return ToString(*tmp);
+	return result;
 }
 
-void Window::GetXY(int &x, int &y)
+void Window::goToXY(int x, int y)
 {
-	getyx(itsWindow, y, x);
-	itsX = x;
-	itsY = y;
+	wmove(m_window, y, x);
 }
 
-void Window::GotoXY(int x, int y)
+int Window::getX()
 {
-	wmove(itsWindow, y, x);
-	itsX = x;
-	itsY = y;
+	return getcurx(m_window);
 }
 
- int Window::X() const
+int Window::getY()
 {
-	return itsX;
-}
-
-int Window::Y() const
-{
-	return itsY;
+	return getcury(m_window);
 }
 
 bool Window::hasCoords(int &x, int &y)
 {
 #	ifndef USE_PDCURSES
-	return wmouse_trafo(itsWindow, &y, &x, 0);
+	return wmouse_trafo(m_window, &y, &x, 0);
 #	else
 	// wmouse_trafo is broken in pdcurses, use our own implementation
 	size_t u_x = x, u_y = y;
-	if (u_x >= itsStartX && u_x < itsStartX+itsWidth
-	&&  u_y >= itsStartY && u_y < itsStartY+itsHeight)
+	if (u_x >= m_start_x && u_x < m_start_x+m_width
+	&&  u_y >= m_start_y && u_y < m_start_y+m_height)
 	{
-		x -= itsStartX;
-		y -= itsStartY;
+		x -= m_start_x;
+		y -= m_start_y;
 		return true;
 	}
 	return false;
 #	endif
 }
 
-size_t Window::GetWidth() const
+bool Window::runGetStringHelper(const char *arg, bool *done) const
 {
-	if (itsBorder != brNone)
-		return itsWidth+2;
+	if (m_get_string_helper)
+	{
+		bool continue_ = m_get_string_helper(arg);
+		if (done != nullptr)
+			*done = !continue_;
+		return true;
+	}
 	else
-		return itsWidth;
+		return false;
 }
 
-size_t Window::GetHeight() const
+size_t Window::getWidth() const
 {
-	size_t height = itsHeight;
-	if (itsBorder != brNone)
+	if (m_border != Border::None)
+		return m_width+2;
+	else
+		return m_width;
+}
+
+size_t Window::getHeight() const
+{
+	size_t height = m_height;
+	if (m_border != Border::None)
 		height += 2;
-	if (!itsTitle.empty())
+	if (!m_title.empty())
 		height += 2;
 	return height;
 }
 
-size_t Window::GetStartX() const
+size_t Window::getStartX() const
 {
-	if (itsBorder != brNone)
-		return itsStartX-1;
+	if (m_border != Border::None)
+		return m_start_x-1;
 	else
-		return itsStartX;
+		return m_start_x;
 }
 
-size_t Window::GetStartY() const
+size_t Window::getStarty() const
 {
-	size_t starty = itsStartY;
-	if (itsBorder != brNone)
+	size_t starty = m_start_y;
+	if (m_border != Border::None)
 		starty--;
-	if (!itsTitle.empty())
+	if (!m_title.empty())
 		starty -= 2;
 	return starty;
 }
 
-const std::string &Window::GetTitle() const
+const std::string &Window::getTitle() const
 {
-	return itsTitle;
+	return m_title;
 }
 
-Color Window::GetColor() const
+Color Window::getColor() const
 {
-	return itsColor;
+	return m_color;
 }
 
-Border Window::GetBorder() const
+Border Window::getBorder() const
 {
-	return itsBorder;
+	return m_border;
 }
 
-int Window::GetTimeout() const
+int Window::getTimeout() const
 {
-	return itsWindowTimeout;
+	return m_window_timeout;
 }
 
-void Window::Scroll(Where where)
+void Window::scroll(Scroll where)
 {
-	idlok(itsWindow, 1);
-	scrollok(itsWindow, 1);
+	idlok(m_window, 1);
+	scrollok(m_window, 1);
 	switch (where)
 	{
-		case wUp:
-			wscrl(itsWindow, 1);
+		case Scroll::Up:
+			wscrl(m_window, 1);
 			break;
-		case wDown:
-			wscrl(itsWindow, -1);
+		case Scroll::Down:
+			wscrl(m_window, -1);
 			break;
-		case wPageUp:
-			wscrl(itsWindow, itsWidth);
+		case Scroll::PageUp:
+			wscrl(m_window, m_width);
 			break;
-		case wPageDown:
-			wscrl(itsWindow, -itsWidth);
+		case Scroll::PageDown:
+			wscrl(m_window, -m_width);
 			break;
 		default:
 			break;
 	}
-	idlok(itsWindow, 0);
-	scrollok(itsWindow, 0);
+	idlok(m_window, 0);
+	scrollok(m_window, 0);
 }
 
 
 Window &Window::operator<<(Colors colors)
 {
-	if (colors.fg == clEnd || colors.bg == clEnd)
+	if (colors.fg == Color::End || colors.bg == Color::End)
 	{
-		*this << clEnd;
+		*this << Color::End;
 		return *this;
 	}
-	itsColors.push(colors);
-	SetColor(colors.fg, colors.bg);
+	m_color_stack.push(colors);
+	setColor(colors.fg, colors.bg);
 	return *this;
 }
 
@@ -785,22 +973,27 @@ Window &Window::operator<<(Color color)
 {
 	switch (color)
 	{
-		case clDefault:
-			while (!itsColors.empty())
-				itsColors.pop();
-			SetColor(itsBaseColor, itsBaseBgColor);
+		case Color::Default:
+			while (!m_color_stack.empty())
+				m_color_stack.pop();
+			setColor(m_base_color, m_base_bg_color);
 			break;
-		case clEnd:
-			if (!itsColors.empty())
-				itsColors.pop();
-			if (!itsColors.empty())
-				SetColor(itsColors.top().fg, itsColors.top().bg);
+		case Color::End:
+			if (!m_color_stack.empty())
+				m_color_stack.pop();
+			if (!m_color_stack.empty())
+				setColor(m_color_stack.top().fg, m_color_stack.top().bg);
 			else
-				SetColor(itsBaseColor, itsBaseBgColor);
+				setColor(m_base_color, m_base_bg_color);
 			break;
 		default:
-			itsColors.push(Colors(color, clDefault));
-			SetColor(itsColors.top().fg, itsColors.top().bg);
+			Color bg;
+			if (m_color_stack.empty())
+				bg = m_bg_color;
+			else
+				bg = m_color_stack.top().bg;
+			m_color_stack.push(Colors(color, bg));
+			setColor(m_color_stack.top().fg, m_color_stack.top().bg);
 	}
 	return *this;
 }
@@ -809,38 +1002,38 @@ Window &Window::operator<<(Format format)
 {
 	switch (format)
 	{
-		case fmtNone:
-			Bold((itsBoldCounter = 0));
-			Reverse((itsReverseCounter = 0));
-			AltCharset((itsAltCharsetCounter = 0));
+		case Format::None:
+			bold((m_bold_counter = 0));
+			reverse((m_reverse_counter = 0));
+			altCharset((m_alt_charset_counter = 0));
 			break;
-		case fmtBold:
-			Bold(++itsBoldCounter);
+		case Format::Bold:
+			bold(++m_bold_counter);
 			break;
-		case fmtBoldEnd:
-			if (--itsBoldCounter <= 0)
-				Bold((itsBoldCounter = 0));
+		case Format::NoBold:
+			if (--m_bold_counter <= 0)
+				bold((m_bold_counter = 0));
 			break;
-		case fmtUnderline:
-			Underline(++itsUnderlineCounter);
+		case Format::Underline:
+			underline(++m_underline_counter);
 			break;
-		case fmtUnderlineEnd:
-			if (--itsUnderlineCounter <= 0)
-				Underline((itsUnderlineCounter = 0));
+		case Format::NoUnderline:
+			if (--m_underline_counter <= 0)
+				underline((m_underline_counter = 0));
 			break;
-		case fmtReverse:
-			Reverse(++itsReverseCounter);
+		case Format::Reverse:
+			reverse(++m_reverse_counter);
 			break;
-		case fmtReverseEnd:
-			if (--itsReverseCounter <= 0)
-				Reverse((itsReverseCounter = 0));
+		case Format::NoReverse:
+			if (--m_reverse_counter <= 0)
+				reverse((m_reverse_counter = 0));
 			break;
-		case fmtAltCharset:
-			AltCharset(++itsAltCharsetCounter);
+		case Format::AltCharset:
+			altCharset(++m_alt_charset_counter);
 			break;
-		case fmtAltCharsetEnd:
-			if (--itsAltCharsetCounter <= 0)
-				AltCharset((itsAltCharsetCounter = 0));
+		case Format::NoAltCharset:
+			if (--m_alt_charset_counter <= 0)
+				altCharset((m_alt_charset_counter = 0));
 			break;
 	}
 	return *this;
@@ -848,104 +1041,75 @@ Window &Window::operator<<(Format format)
 
 Window &Window::operator<<(int (*f)(WINDOW *))
 {
-	f(itsWindow);
+	f(m_window);
 	return *this;
 }
 
 Window &Window::operator<<(XY coords)
 {
-	GotoXY(coords.x, coords.y);
+	goToXY(coords.x, coords.y);
 	return *this;
 }
 
 Window &Window::operator<<(const char *s)
 {
-	wprintw(itsWindow, "%s", s);
+	for (const char *c = s; *c != '\0'; ++c)
+		wprintw(m_window, "%c", *c);
 	return *this;
 }
 
 Window &Window::operator<<(char c)
 {
-	wprintw(itsWindow, "%c", c);
+	wprintw(m_window, "%c", c);
 	return *this;
 }
 
 Window &Window::operator<<(const wchar_t *ws)
 {
-	wprintw(itsWindow, "%ls", ws);
+	for (const wchar_t *wc = ws; *wc != L'\0'; ++wc)
+		wprintw(m_window, "%lc", *wc);
 	return *this;
 }
 
 Window &Window::operator<<(wchar_t wc)
 {
-	wprintw(itsWindow, "%lc", wc);
+	wprintw(m_window, "%lc", wc);
 	return *this;
 }
 
 Window &Window::operator<<(int i)
 {
-	wprintw(itsWindow, "%d", i);
+	wprintw(m_window, "%d", i);
 	return *this;
 }
 
 Window &Window::operator<<(double d)
 {
-	wprintw(itsWindow, "%f", d);
+	wprintw(m_window, "%f", d);
 	return *this;
 }
 
 Window &Window::operator<<(const std::string &s)
 {
-	for (std::string::const_iterator it = s.begin(); it != s.end(); ++it)
-		wprintw(itsWindow, "%c", *it);
+	// for some reason passing whole string at once with "%s" doesn't work
+	// (string is cut in the middle, probably due to limitation of ncurses'
+	// internal buffer?), so we need to pass characters in a loop.
+	for (auto it = s.begin(); it != s.end(); ++it)
+		wprintw(m_window, "%c", *it);
 	return *this;
 }
 
 Window &Window::operator<<(const std::wstring &ws)
 {
-	for (std::wstring::const_iterator it = ws.begin(); it != ws.end(); ++it)
-		wprintw(itsWindow, "%lc", *it);
+	for (auto it = ws.begin(); it != ws.end(); ++it)
+		wprintw(m_window, "%lc", *it);
 	return *this;
 }
 
 Window &Window::operator<<(size_t s)
 {
-	wprintw(itsWindow, "%zu", s);
+	wprintw(m_window, "%zu", s);
 	return *this;
 }
 
-std::string ToString(const std::wstring &ws)
-{
-	std::string result;
-	char s[MB_CUR_MAX];
-	for (size_t i = 0; i < ws.length(); ++i)
-	{
-		int n = wcrtomb(s, ws[i], 0);
-		if (n > 0)
-			result.append(s, n);
-	}
-	return result;
 }
-
-std::wstring ToWString(const std::string &s)
-{
-	std::wstring result;
-	wchar_t *ws = new wchar_t[s.length()];
-	const char *c_s = s.c_str();
-	int n = mbsrtowcs(ws, &c_s, s.length(), 0);
-	if (n > 0)
-		result.append(ws, n);
-	delete [] ws;
-	return result;
-}
-
-size_t Window::Length(const std::wstring &ws)
-{
-#	ifdef WIN32
-	return ws.length();
-#	else
-	int len = wcswidth(ws.c_str(), -1);
-	return len < 0 ? ws.length() : len;
-#	endif // WIN32
-}
-

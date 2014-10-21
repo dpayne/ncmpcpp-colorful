@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,12 +18,10 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _CURL_HANDLE_H
-#define _CURL_HANDLE_H
+#ifndef NCMPCPP_CURL_HANDLE_H
+#define NCMPCPP_CURL_HANDLE_H
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
+#include "config.h"
 
 #ifdef HAVE_CURL_CURL_H
 
@@ -39,5 +37,5 @@ namespace Curl
 
 #endif // HAVE_CURL_CURL_H
 
-#endif
+#endif // NCMPCPP_CURL_HANDLE_H
 

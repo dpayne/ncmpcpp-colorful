@@ -1,3 +1,51 @@
+ncmpcpp-0.6_beta5
+
+* Corrupted tags no longer cause assertion failures.
+* MPD connection attempts are now made at most once per second.
+* Deletion of playlists in both browser and playlist editor is now properly handled.
+* Various actions no longer cause the program to crash when invoked with empty playlist.
+
+ncmpcpp-0.6_beta4
+
+* Jumping to current song in playlist doesn't trigger assertion failures anymore.
+* Readline's completion feature is now properly disabled.
+
+ncmpcpp-0.6_beta3
+
+* Handling of server events has been improved.
+* Readline now ignores escape key.
+* Cropping a playlist now works only if its length is bigger than 1.
+* Browser and media library sorting now works properly with filtering.
+* Compilation with boost-1.56 has been fixed.
+* Configuration option visualizer_type now accepts "spectrum" value.
+* Configuration option autocenter_mode is now properly read.
+* Configuration option visualizer_sample_multiplier now accepts all positive numbers.
+* Documentation was updated to reflect the changes.
+* Mouse event handling in media library now works properly.
+* ncmpcpp now works properly with password protected server.
+* Data fetching delay in media library and playlist editor is now optional.
+
+ncmpcpp-0.6_beta2
+
+* Fixed the issue that prevented MPD flags toggling from working properly.
+* Song change event is now properly handled after song ends with consume flag active.
+* ncmpcpp now operates in raw terminal mode and ignores SIGINT.
+* Separators between columns in media library, playlist editor and tag editor are now reliably colored.
+* Build failures due to the missing include are now fixed.
+* Playlist cropping now works as expected if no item is selected.
+
+ncmpcpp-0.6_beta1
+
+* Support for polling communication mode has been removed. Additionally, MPD version >= 0.16 is required.
+* Keybinding system has been redesigned: "keys" file is now deprecated; "bindings" file is used instead. It has support for many features, including binding to non-ascii characters and macros.
+* Support for readline library was added.
+* Browser has support for custom sort format.
+* Playlist has support for MPD priorities.
+* Media library can be sorted by modification time.
+* Visualizer's frequency spectrum was adjusted to look more pleasant.
+* Broken compatibility of various actions with filtered lists has been corrected.
+* Tons of other small changes and improvements were made.
+
 ncmpcpp-0.5.10
 
 * fix compilation with gcc 4.7

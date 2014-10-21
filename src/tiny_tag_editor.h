@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,54 +18,51 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _TINY_TAG_EDITOR_H
-#define _TINY_TAG_EDITOR_H
+#ifndef NCMPCPP_TINY_TAG_EDITOR_H
+#define NCMPCPP_TINY_TAG_EDITOR_H
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
+#include "config.h"
 
 #ifdef HAVE_TAGLIB_H
 
-// taglib includes
-#include "tfile.h"
-
+#include "interfaces.h"
+#include "mutable_song.h"
 #include "screen.h"
 
-class TinyTagEditor : public Screen< Menu<Buffer> >
+struct TinyTagEditor: Screen<NC::Menu<NC::Buffer>>
 {
-	public:
-		virtual void Resize();
-		virtual void SwitchTo();
-		
-		virtual std::basic_string<my_char_t> Title();
-		
-		virtual void EnterPressed();
-		virtual void SpacePressed() { }
-		virtual void MouseButtonPressed(MEVENT);
-		
-		virtual bool allowsSelection() { return false; }
-		
-		virtual List *GetList() { return 0; }
-		
-		virtual bool isMergable() { return true; }
-		
-		bool SetEdited(MPD::Song *);
-		
-	protected:
-		virtual void Init();
-		virtual bool isLockable() { return true; }
-		
-	private:
-		bool GetTags();
-		MPD::Song itsEdited;
-		
-		static bool extendedTagsSupported(TagLib::File *);
+	TinyTagEditor();
+	
+	// Screen< NC::Menu<NC::Buffer> > implementation
+	virtual void resize() OVERRIDE;
+	virtual void switchTo() OVERRIDE;
+	
+	virtual std::wstring title() OVERRIDE;
+	virtual ScreenType type() OVERRIDE { return ScreenType::TinyTagEditor; }
+	
+	virtual void update() OVERRIDE { }
+	
+	virtual void enterPressed() OVERRIDE;
+	virtual void spacePressed() OVERRIDE { }
+	virtual void mouseButtonPressed(MEVENT me) OVERRIDE;
+	
+	virtual bool isMergable() OVERRIDE { return true; }
+	
+	// private members
+	void SetEdited(const MPD::Song &);
+	
+protected:
+	virtual bool isLockable() OVERRIDE { return false; }
+	
+private:
+	bool getTags();
+	MPD::MutableSong itsEdited;
+	BaseScreen *m_previous_screen;
 };
 
 extern TinyTagEditor *myTinyTagEditor;
 
 #endif // HAVE_TAGLIB_H
 
-#endif
+#endif // NCMPCPP_TINY_TAG_EDITOR_H
 

@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,112 +18,99 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#include <sys/time.h>
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include <iomanip>
 
 #include "global.h"
+#include "helpers.h"
 #include "server_info.h"
+#include "statusbar.h"
+#include "screen_switcher.h"
 
 using Global::MainHeight;
 using Global::MainStartY;
-using Global::myOldScreen;
 
-ServerInfo *myServerInfo = new ServerInfo;
+ServerInfo *myServerInfo;
 
-void ServerInfo::Init()
+ServerInfo::ServerInfo()
+: m_timer(boost::posix_time::from_time_t(0))
 {
 	SetDimensions();
-	w = new Scrollpad((COLS-itsWidth)/2, (MainHeight-itsHeight)/2+MainStartY, itsWidth, itsHeight, "MPD server info", Config.main_color, Config.window_border);
-	
-	Mpd.GetURLHandlers(itsURLHandlers);
-	Mpd.GetTagTypes(itsTagTypes);
-	
-	isInitialized = 1;
+	w = NC::Scrollpad((COLS-itsWidth)/2, (MainHeight-itsHeight)/2+MainStartY, itsWidth, itsHeight, "MPD server info", Config.main_color, Config.window_border);
 }
 
-void ServerInfo::SwitchTo()
+void ServerInfo::switchTo()
 {
 	using Global::myScreen;
-	
-	if (myScreen == this)
+	if (myScreen != this)
 	{
-		myOldScreen->SwitchTo();
-		return;
+		SwitchTo::execute(this);
+		
+		itsURLHandlers.clear();
+		itsTagTypes.clear();
+		
+		Mpd.GetURLHandlers(vectorMoveInserter(itsURLHandlers));
+		Mpd.GetTagTypes(vectorMoveInserter(itsTagTypes));
 	}
-	if (MainHeight < 5)
-	{
-		ShowMessage("Screen is too small to display this window!");
-		return;
-	}
-	
-	if (!isInitialized)
-		Init();
-	
-	// Resize() can fall back to old screen, so we need it updated
-	myOldScreen = myScreen;
-	
-	if (hasToBeResized)
-		Resize();
-	
-	myScreen = this;
-	w->Window::Clear();
+	else
+		switchToPreviousScreen();
 }
 
-void ServerInfo::Resize()
+void ServerInfo::resize()
 {
 	SetDimensions();
-	if (itsHeight < 5) // screen too low to display this window
-		return myOldScreen->SwitchTo();
-	w->Resize(itsWidth, itsHeight);
-	w->MoveTo((COLS-itsWidth)/2, (MainHeight-itsHeight)/2+MainStartY);
-	if (myOldScreen && myOldScreen->hasToBeResized) // resize background window
+	w.resize(itsWidth, itsHeight);
+	w.moveTo((COLS-itsWidth)/2, (MainHeight-itsHeight)/2+MainStartY);
+	if (previousScreen() && previousScreen()->hasToBeResized) // resize background window
 	{
-		myOldScreen->Resize();
-		myOldScreen->Refresh();
+		previousScreen()->resize();
+		previousScreen()->refresh();
 	}
 	hasToBeResized = 0;
 }
 
-std::basic_string<my_char_t> ServerInfo::Title()
+std::wstring ServerInfo::title()
 {
-	return myOldScreen->Title();
+	return previousScreen()->title();
 }
 
-void ServerInfo::Update()
+void ServerInfo::update()
 {
-	static timeval past = { 0, 0 };
-	if (Global::Timer.tv_sec <= past.tv_sec)
+	if (Global::Timer - m_timer < boost::posix_time::seconds(1))
 		return;
-	gettimeofday(&past, 0);
+	m_timer = Global::Timer;
 	
-	Mpd.UpdateStats();
-	w->Clear();
+	MPD::Statistics stats = Mpd.getStatistics();
+	if (stats.empty())
+		return;
 	
-	*w << fmtBold << U("Version: ") << fmtBoldEnd << U("0.") << Mpd.Version() << U(".*\n");
-	*w << fmtBold << U("Uptime: ") << fmtBoldEnd;
-	ShowTime(*w, Mpd.Uptime(), 1);
-	*w << '\n';
-	*w << fmtBold << U("Time playing: ") << fmtBoldEnd << MPD::Song::ShowTime(Mpd.PlayTime()) << '\n';
-	*w << '\n';
-	*w << fmtBold << U("Total playtime: ") << fmtBoldEnd;
-	ShowTime(*w, Mpd.DBPlayTime(), 1);
-	*w << '\n';
-	*w << fmtBold << U("Artist names: ") << fmtBoldEnd << Mpd.NumberOfArtists() << '\n';
-	*w << fmtBold << U("Album names: ") << fmtBoldEnd << Mpd.NumberOfAlbums() << '\n';
-	*w << fmtBold << U("Songs in database: ") << fmtBoldEnd << Mpd.NumberOfSongs() << '\n';
-	*w << '\n';
-	*w << fmtBold << U("Last DB update: ") << fmtBoldEnd << Timestamp(Mpd.DBUpdateTime()) << '\n';
-	*w << '\n';
-	*w << fmtBold << U("URL Handlers:") << fmtBoldEnd;
-	for (MPD::TagList::const_iterator it = itsURLHandlers.begin(); it != itsURLHandlers.end(); ++it)
-		*w << (it != itsURLHandlers.begin() ? U(", ") : U(" ")) << *it;
-	*w << U("\n\n");
-	*w << fmtBold << U("Tag Types:") << fmtBoldEnd;
-	for (MPD::TagList::const_iterator it = itsTagTypes.begin(); it != itsTagTypes.end(); ++it)
-		*w << (it != itsTagTypes.begin() ? U(", ") : U(" ")) << *it;
+	w.clear();
 	
-	w->Flush();
-	w->Refresh();
+	w << NC::Format::Bold << "Version: " << NC::Format::NoBold << "0." << Mpd.Version() << ".*\n";
+	w << NC::Format::Bold << "Uptime: " << NC::Format::NoBold;
+	ShowTime(w, stats.uptime(), 1);
+	w << '\n';
+	w << NC::Format::Bold << "Time playing: " << NC::Format::NoBold << MPD::Song::ShowTime(stats.playTime()) << '\n';
+	w << '\n';
+	w << NC::Format::Bold << "Total playtime: " << NC::Format::NoBold;
+	ShowTime(w, stats.dbPlayTime(), 1);
+	w << '\n';
+	w << NC::Format::Bold << "Artist names: " << NC::Format::NoBold << stats.artists() << '\n';
+	w << NC::Format::Bold << "Album names: " << NC::Format::NoBold << stats.albums() << '\n';
+	w << NC::Format::Bold << "Songs in database: " << NC::Format::NoBold << stats.songs() << '\n';
+	w << '\n';
+	w << NC::Format::Bold << "Last DB update: " << NC::Format::NoBold << Timestamp(stats.dbUpdateTime()) << '\n';
+	w << '\n';
+	w << NC::Format::Bold << "URL Handlers:" << NC::Format::NoBold;
+	for (auto it = itsURLHandlers.begin(); it != itsURLHandlers.end(); ++it)
+		w << (it != itsURLHandlers.begin() ? ", " : " ") << *it;
+	w << "\n\n";
+	w << NC::Format::Bold << "Tag Types:" << NC::Format::NoBold;
+	for (auto it = itsTagTypes.begin(); it != itsTagTypes.end(); ++it)
+		w << (it != itsTagTypes.begin() ? ", " : " ") << *it;
+	
+	w.flush();
+	w.refresh();
 }
 
 void ServerInfo::SetDimensions()

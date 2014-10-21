@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,62 +18,89 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _PLAYLIST_EDITOR_H
-#define _PLAYLIST_EDITOR_H
+#ifndef NCMPCPP_PLAYLIST_EDITOR_H
+#define NCMPCPP_PLAYLIST_EDITOR_H
 
-#include "ncmpcpp.h"
+#include <boost/date_time/posix_time/posix_time_types.hpp>
 
-class PlaylistEditor : public Screen<Window>
+#include "interfaces.h"
+#include "screen.h"
+
+struct PlaylistEditor: Screen<NC::Window *>, Filterable, HasColumns, HasSongs, Searchable, Tabbable
 {
-	public:
-		virtual void SwitchTo();
-		virtual void Resize();
-		
-		virtual std::basic_string<my_char_t> Title();
-		
-		virtual void Refresh();
-		virtual void Update();
-		
-		virtual void EnterPressed() { AddToPlaylist(1); }
-		virtual void SpacePressed();
-		virtual void MouseButtonPressed(MEVENT);
-		virtual bool isTabbable() { return true; }
-		
-		virtual MPD::Song *CurrentSong();
-		virtual MPD::Song *GetSong(size_t pos) { return w == Content ? &Content->at(pos) : 0; }
-		
-		virtual bool allowsSelection() { return w == Content; }
-		virtual void ReverseSelection() { Content->ReverseSelection(); }
-		virtual void GetSelectedSongs(MPD::SongList &);
-		
-		virtual void ApplyFilter(const std::string &);
+	PlaylistEditor();
+	
+	virtual void switchTo() OVERRIDE;
+	virtual void resize() OVERRIDE;
+	
+	virtual std::wstring title() OVERRIDE;
+	virtual ScreenType type() OVERRIDE { return ScreenType::PlaylistEditor; }
+	
+	virtual void refresh() OVERRIDE;
+	virtual void update() OVERRIDE;
+	
+	virtual int windowTimeout() OVERRIDE;
 
-		virtual void JumpTo(const std::string &);
-		
-		virtual List *GetList();
-		
-		virtual bool isMergable() { return true; }
-		
-		bool NextColumn();
-		bool PrevColumn();
-		
-		Menu<std::string> *Playlists;
-		Menu<MPD::Song> *Content;
-		
-	protected:
-		virtual void Init();
-		virtual bool isLockable() { return true; }
-		
-	private:
-		void AddToPlaylist(bool);
-		
-		static size_t LeftColumnStartX;
-		static size_t LeftColumnWidth;
-		static size_t RightColumnStartX;
-		static size_t RightColumnWidth;
+	virtual void enterPressed() OVERRIDE;
+	virtual void spacePressed() OVERRIDE;
+	virtual void mouseButtonPressed(MEVENT me) OVERRIDE;
+	
+	virtual bool isMergable() OVERRIDE { return true; }
+	
+	// Filterable implementation
+	virtual bool allowsFiltering() OVERRIDE;
+	virtual std::string currentFilter() OVERRIDE;
+	virtual void applyFilter(const std::string &filter) OVERRIDE;
+	
+	// Searchable implementation
+	virtual bool allowsSearching() OVERRIDE;
+	virtual bool search(const std::string &constraint) OVERRIDE;
+	virtual void nextFound(bool wrap) OVERRIDE;
+	virtual void prevFound(bool wrap) OVERRIDE;
+	
+	// HasSongs implementation
+	virtual ProxySongList proxySongList() OVERRIDE;
+	
+	virtual bool allowsSelection() OVERRIDE;
+	virtual void reverseSelection() OVERRIDE;
+	virtual MPD::SongList getSelectedSongs() OVERRIDE;
+	
+	// HasColumns implementation
+	virtual bool previousColumnAvailable() OVERRIDE;
+	virtual void previousColumn() OVERRIDE;
+	
+	virtual bool nextColumnAvailable() OVERRIDE;
+	virtual void nextColumn() OVERRIDE;
+	
+	// private members
+	void updateTimer();
+
+	void requestPlaylistsUpdate() { m_playlists_update_requested = true; }
+	void requestContentsUpdate() { m_content_update_requested = true; }
+	
+	virtual void Locate(const std::string &);
+	bool isContentFiltered();
+	ProxySongList contentProxyList();
+	
+	NC::Menu<std::string> Playlists;
+	NC::Menu<MPD::Song> Content;
+	
+protected:
+	virtual bool isLockable() OVERRIDE { return true; }
+	
+private:
+	void AddToPlaylist(bool);
+	
+	bool m_playlists_update_requested;
+	bool m_content_update_requested;
+
+	boost::posix_time::ptime m_timer;
+
+	const int m_window_timeout;
+	const boost::posix_time::time_duration m_fetching_delay;
 };
 
 extern PlaylistEditor *myPlaylistEditor;
 
-#endif
+#endif // NCMPCPP_PLAYLIST_EDITOR_H
 

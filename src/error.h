@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,20 +18,12 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _ERROR_H
-#define _ERROR_H
-
-#if defined(__GNUC__) && __GNUC__ >= 3
-# define GNUC_NORETURN __attribute__((noreturn))
-#else
-# define GNUC_NORETURN
-#endif
+#ifndef NCMPCPP_ERROR_H
+#define NCMPCPP_ERROR_H
 
 #include <string>
-
-#define Error(msg) std::cerr << "ncmpcpp: " << msg;
+#include "gcc.h"
 
 void FatalError(const std::string &msg) GNUC_NORETURN;
 
-#endif
-
+#endif // NCMPCPP_ERROR_H

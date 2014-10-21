@@ -1,0 +1,150 @@
+/* config.h.in.  Generated from configure.ac by autoheader.  */
+
+/* require boost.thread v3 */
+#undef BOOST_THREAD_VERSION
+
+/* enables clock screen */
+#undef ENABLE_CLOCK
+
+/* enables outputs screen */
+#undef ENABLE_OUTPUTS
+
+/* enables music visualizer screen */
+#undef ENABLE_VISUALIZER
+
+/* Define to 1 if you have the <boost/algorithm/string.hpp> header file. */
+#undef HAVE_BOOST_ALGORITHM_STRING_HPP
+
+/* Define to 1 if you have the <boost/bind.hpp> header file. */
+#undef HAVE_BOOST_BIND_HPP
+
+/* Define to 1 if you have the <boost/date_time/posix_time/posix_time.hpp>
+   header file. */
+#undef HAVE_BOOST_DATE_TIME_POSIX_TIME_POSIX_TIME_HPP
+
+/* Define to 1 if you have the <boost/filesystem.hpp> header file. */
+#undef HAVE_BOOST_FILESYSTEM_HPP
+
+/* Define to 1 if you have the <boost/format.hpp> header file. */
+#undef HAVE_BOOST_FORMAT_HPP
+
+/* Define to 1 if you have the <boost/lexical_cast.hpp> header file. */
+#undef HAVE_BOOST_LEXICAL_CAST_HPP
+
+/* Define to 1 if you have the <boost/locale.hpp> header file. */
+#undef HAVE_BOOST_LOCALE_HPP
+
+/* Define to 1 if you have the <boost/program_options.hpp> header file. */
+#undef HAVE_BOOST_PROGRAM_OPTIONS_HPP
+
+/* Define to 1 if you have the <boost/regex.hpp> header file. */
+#undef HAVE_BOOST_REGEX_HPP
+
+/* Define to 1 if you have the <boost/thread.hpp> header file. */
+#undef HAVE_BOOST_THREAD_HPP
+
+/* Define to 1 if you have the <curl/curl.h> header file. */
+#undef HAVE_CURL_CURL_H
+
+/* Define to 1 if you have the <curses.h> header file. */
+#undef HAVE_CURSES_H
+
+/* Define to 1 if you have the <dlfcn.h> header file. */
+#undef HAVE_DLFCN_H
+
+/* Define to 1 if you have the <fftw3.h> header file. */
+#undef HAVE_FFTW3_H
+
+/* Define to 1 if you have the <inttypes.h> header file. */
+#undef HAVE_INTTYPES_H
+
+/* Define to 1 if you have the <langinfo.h> header file. */
+#undef HAVE_LANGINFO_H
+
+/* Define to 1 if you have the <memory.h> header file. */
+#undef HAVE_MEMORY_H
+
+/* Define to 1 if you have the <mpd/client.h> header file. */
+#undef HAVE_MPD_CLIENT_H
+
+/* Define to 1 if you have the <netinet/in.h> header file. */
+#undef HAVE_NETINET_IN_H
+
+/* Define to 1 if you have the <netinet/tcp.h> header file. */
+#undef HAVE_NETINET_TCP_H
+
+/* Define to 1 if you have the <pthread.h> header file. */
+#undef HAVE_PTHREAD_H
+
+/* Define to 1 if you have the <readline/history.h> header file. */
+#undef HAVE_READLINE_HISTORY_H
+
+/* Define to 1 if you have the <readline/readline.h> header file. */
+#undef HAVE_READLINE_READLINE_H
+
+/* Define to 1 if you have the <stdint.h> header file. */
+#undef HAVE_STDINT_H
+
+/* Define to 1 if you have the <stdlib.h> header file. */
+#undef HAVE_STDLIB_H
+
+/* Define to 1 if you have the <strings.h> header file. */
+#undef HAVE_STRINGS_H
+
+/* Define to 1 if you have the <string.h> header file. */
+#undef HAVE_STRING_H
+
+/* Define to 1 if you have the <sys/stat.h> header file. */
+#undef HAVE_SYS_STAT_H
+
+/* Define to 1 if you have the <sys/types.h> header file. */
+#undef HAVE_SYS_TYPES_H
+
+/* Define to 1 if you have the <taglib.h> header file. */
+#undef HAVE_TAGLIB_H
+
+/* Define to 1 if you have the <unistd.h> header file. */
+#undef HAVE_UNISTD_H
+
+/* Define to the sub-directory in which libtool stores uninstalled libraries.
+   */
+#undef LT_OBJDIR
+
+/* enables unicode support */
+#undef NCMPCPP_UNICODE
+
+/* override keyword used in C++11 */
+#undef OVERRIDE
+
+/* Name of package */
+#undef PACKAGE
+
+/* Define to the address where bug reports for this package should be sent. */
+#undef PACKAGE_BUGREPORT
+
+/* Define to the full name of this package. */
+#undef PACKAGE_NAME
+
+/* Define to the full name and version of this package. */
+#undef PACKAGE_STRING
+
+/* Define to the one symbol short name of this package. */
+#undef PACKAGE_TARNAME
+
+/* Define to the home page for this package. */
+#undef PACKAGE_URL
+
+/* Define to the version of this package. */
+#undef PACKAGE_VERSION
+
+/* Define to 1 if you have the ANSI C header files. */
+#undef STDC_HEADERS
+
+/* enables pdcurses support */
+#undef USE_PDCURSES
+
+/* Version number of package */
+#undef VERSION
+
+/* x11 pdcurses available */
+#undef XCURSES

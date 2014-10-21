@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,97 +18,91 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _PLAYLIST_H
-#define _PLAYLIST_H
+#ifndef NCMPCPP_PLAYLIST_H
+#define NCMPCPP_PLAYLIST_H
 
-#include <sstream>
+#include <boost/date_time/posix_time/posix_time_types.hpp>
+#include <unordered_map>
 
-#include "ncmpcpp.h"
+#include "interfaces.h"
 #include "screen.h"
 #include "song.h"
 
-class Playlist : public Screen<Window>
+struct Playlist: Screen<NC::Menu<MPD::Song>>, Filterable, HasSongs, Searchable, Tabbable
 {
-	public:
-		Playlist() : NowPlaying(-1), itsTotalLength(0), itsRemainingTime(0), itsScrollBegin(0) { }
-		~Playlist() { }
-		
-		virtual void SwitchTo();
-		virtual void Resize();
-		
-		virtual std::basic_string<my_char_t> Title();
-		
-		virtual void EnterPressed();
-		virtual void SpacePressed();
-		virtual void ReadKey(int &);
-		virtual void MouseButtonPressed(MEVENT);
-		virtual bool isTabbable() { return true; }
-		
-		virtual MPD::Song *CurrentSong();
-		virtual MPD::Song *GetSong(size_t pos) { return w == Items ? &Items->at(pos) : 0; }
-		
-		virtual bool allowsSelection() { return w == Items; }
-		virtual void ReverseSelection() { Items->ReverseSelection(); }
-		virtual void GetSelectedSongs(MPD::SongList &);
-		
-		virtual void ApplyFilter(const std::string &);
-		
-		virtual List *GetList() { return w == Items ? Items : 0; }
-		
-		virtual bool isMergable() { return true; }
-		
-		bool isPlaying() { return NowPlaying >= 0 && !Items->Empty(); }
-		const MPD::Song *NowPlayingSong();
-		
-		void Sort();
-		void AdjustSortOrder(int key);
-		bool SortingInProgress() { return w == SortDialog; }
-		void FixPositions(size_t = 0);
-		
-		void EnableHighlighting();
-		void UpdateTimer() { time(&itsTimer); }
-		time_t Timer() const { return itsTimer; }
-		
-		bool Add(const MPD::Song &s, bool in_playlist, bool play, int position = -1);
-		bool Add(const MPD::SongList &l, bool play, int position = -1);
-		
-		static std::string SongToString(const MPD::Song &, void *);
-		static std::string SongInColumnsToString(const MPD::Song &, void *);
-		
-		Menu< MPD::Song > *Items;
-		
-		int NowPlaying;
-		
-		static bool ReloadTotalLength;
-		static bool ReloadRemaining;
-		
-		static bool BlockNowPlayingUpdate;
-		static bool BlockUpdate;
-		
-	protected:
-		virtual void Init();
-		virtual bool isLockable() { return true; }
-		
-	private:
-		std::string TotalLength();
-		
-		std::string itsBufferedStats;
-		
-		size_t itsTotalLength;
-		size_t itsRemainingTime;
-		size_t itsScrollBegin;
-		
-		time_t itsTimer;
-		
-		static bool Sorting(MPD::Song *a, MPD::Song *b);
-		
-		static Menu< std::pair<std::string, MPD::Song::GetFunction> > *SortDialog;
-		static const size_t SortOptions;
-		static const size_t SortDialogWidth;
-		static size_t SortDialogHeight;
+	Playlist();
+	
+	// Screen<NC::Menu<MPD::Song>> implementation
+	virtual void switchTo() OVERRIDE;
+	virtual void resize() OVERRIDE;
+	
+	virtual std::wstring title() OVERRIDE;
+	virtual ScreenType type() OVERRIDE { return ScreenType::Playlist; }
+	
+	virtual void update() OVERRIDE;
+	
+	virtual void enterPressed() OVERRIDE;
+	virtual void spacePressed() OVERRIDE;
+	virtual void mouseButtonPressed(MEVENT me) OVERRIDE;
+	
+	virtual bool isMergable() OVERRIDE { return true; }
+	
+	// Filterable implementation
+	virtual bool allowsFiltering() OVERRIDE;
+	virtual std::string currentFilter() OVERRIDE;
+	virtual void applyFilter(const std::string &filter) OVERRIDE;
+	
+	// Searchable implementation
+	virtual bool allowsSearching();
+	virtual bool search(const std::string &constraint) OVERRIDE;
+	virtual void nextFound(bool wrap) OVERRIDE;
+	virtual void prevFound(bool wrap) OVERRIDE;
+	
+	// HasSongs implementation
+	virtual ProxySongList proxySongList() OVERRIDE;
+	
+	virtual bool allowsSelection() OVERRIDE;
+	virtual void reverseSelection() OVERRIDE;
+	virtual MPD::SongList getSelectedSongs() OVERRIDE;
+	
+	// private members
+	MPD::Song nowPlayingSong();
+	
+	bool isFiltered();
+	void Reverse();
+	
+	void EnableHighlighting();
+	
+	void SetSelectedItemsPriority(int prio);
+	
+	bool checkForSong(const MPD::Song &s);
+	void registerSong(const MPD::Song &s);
+	void unregisterSong(const MPD::Song &s);
+	
+	void reloadTotalLength() { m_reload_total_length = true; }
+	void reloadRemaining() { m_reload_remaining = true; }
+	
+protected:
+	virtual bool isLockable() OVERRIDE { return true; }
+	
+private:
+	std::string getTotalLength();
+
+	std::string m_stats;
+	
+	std::unordered_map<MPD::Song, int, MPD::Song::Hash> m_song_refs;
+	
+	size_t m_total_length;;
+	size_t m_remaining_time;
+	size_t m_scroll_begin;
+	
+	boost::posix_time::ptime m_timer;
+
+	bool m_reload_total_length;
+	bool m_reload_remaining;
 };
 
 extern Playlist *myPlaylist;
 
-#endif
+#endif // NCMPCPP_PLAYLIST_H
 

@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,45 +18,48 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _SERVER_INFO
-#define _SERVER_INFO
+#ifndef NCMPCPP_SERVER_INFO_H
+#define NCMPCPP_SERVER_INFO_H
 
+#include <boost/date_time/posix_time/posix_time_types.hpp>
+
+#include "interfaces.h"
 #include "screen.h"
 
-class ServerInfo : public Screen<Scrollpad>
+struct ServerInfo: Screen<NC::Scrollpad>, Tabbable
 {
-	public:
-		virtual void SwitchTo();
-		virtual void Resize();
-		
-		virtual std::basic_string<my_char_t> Title();
-		
-		virtual void Update();
-		
-		virtual void EnterPressed() { }
-		virtual void SpacePressed() { }
-		
-		virtual bool allowsSelection() { return false; }
-		
-		virtual List *GetList() { return 0; }
-		
-		virtual bool isMergable() { return false; }
-		
-	protected:
-		virtual void Init();
-		virtual bool isLockable() { return false; }
-		
-	private:
-		void SetDimensions();
-		
-		MPD::TagList itsURLHandlers;
-		MPD::TagList itsTagTypes;
-		
-		size_t itsWidth;
-		size_t itsHeight;
+	ServerInfo();
+	
+	// Screen<NC::Scrollpad> implementation
+	virtual void switchTo() OVERRIDE;
+	virtual void resize() OVERRIDE;
+	
+	virtual std::wstring title() OVERRIDE;
+	virtual ScreenType type() OVERRIDE { return ScreenType::ServerInfo; }
+	
+	virtual void update() OVERRIDE;
+	
+	virtual void enterPressed() OVERRIDE { }
+	virtual void spacePressed() OVERRIDE { }
+	
+	virtual bool isMergable() OVERRIDE { return false; }
+	
+protected:
+	virtual bool isLockable() OVERRIDE { return false; }
+	
+private:
+	void SetDimensions();
+	
+	boost::posix_time::ptime m_timer;
+
+	MPD::StringList itsURLHandlers;
+	MPD::StringList itsTagTypes;
+	
+	size_t itsWidth;
+	size_t itsHeight;
 };
 
 extern ServerInfo *myServerInfo;
 
-#endif
+#endif // NCMPCPP_SERVER_INFO_H
 

@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -20,43 +20,59 @@
 
 #include <cassert>
 
-#include "screen.h"
 #include "global.h"
+#include "screen.h"
+#include "settings.h"
 
 using Global::myScreen;
 using Global::myLockedScreen;
 using Global::myInactiveScreen;
 
-void ApplyToVisibleWindows(void (BasicScreen::*f)())
+void drawSeparator(int x)
 {
-	if (myLockedScreen && myScreen->isMergable())
+	attron(COLOR_PAIR(int(Config.main_color)));
+	mvvline(Global::MainStartY, x, 0, Global::MainHeight);
+	attroff(COLOR_PAIR(int(Config.main_color)));
+	refresh();
+}
+
+void genericMouseButtonPressed(NC::Window &w, MEVENT me)
+{
+	if (me.bstate & BUTTON2_PRESSED)
 	{
-		if (myScreen == myLockedScreen)
-		{
-			if (myInactiveScreen)
-				(myInactiveScreen->*f)();
-		}
+		if (Config.mouse_list_scroll_whole_page)
+			w.scroll(NC::Scroll::PageDown);
 		else
-			(myLockedScreen->*f)();
+			for (size_t i = 0; i < Config.lines_scrolled; ++i)
+				w.scroll(NC::Scroll::Down);
 	}
-	(myScreen->*f)();
+	else if (me.bstate & BUTTON4_PRESSED)
+	{
+		if (Config.mouse_list_scroll_whole_page)
+			w.scroll(NC::Scroll::PageUp);
+		else
+			for (size_t i = 0; i < Config.lines_scrolled; ++i)
+				w.scroll(NC::Scroll::Up);
+	}
 }
 
-void UpdateInactiveScreen(BasicScreen *screen)
+void scrollpadMouseButtonPressed(NC::Scrollpad &w, MEVENT me)
 {
-	myInactiveScreen = myLockedScreen == screen ? 0 : myLockedScreen;
+	if (me.bstate & BUTTON2_PRESSED)
+	{
+		for (size_t i = 0; i < Config.lines_scrolled; ++i)
+			w.scroll(NC::Scroll::Down);
+	}
+	else if (me.bstate & BUTTON4_PRESSED)
+	{
+		for (size_t i = 0; i < Config.lines_scrolled; ++i)
+			w.scroll(NC::Scroll::Up);
+	}
 }
 
-bool isVisible(BasicScreen *screen)
-{
-	assert(screen != 0);
-	if (myLockedScreen && myScreen->isMergable())
-		return screen == myScreen || screen == myInactiveScreen || screen == myLockedScreen;
-	else
-		return screen == myScreen;
-}
+/***********************************************************************/
 
-void BasicScreen::GetWindowResizeParams(size_t &x_offset, size_t &width, bool adjust_locked_screen)
+void BaseScreen::getWindowResizeParams(size_t &x_offset, size_t &width, bool adjust_locked_screen)
 {
 	width = COLS;
 	x_offset = 0;
@@ -72,36 +88,83 @@ void BasicScreen::GetWindowResizeParams(size_t &x_offset, size_t &width, bool ad
 			
 			if (adjust_locked_screen)
 			{
-				myLockedScreen->Resize();
-				myLockedScreen->Refresh();
-				
-				attron(COLOR_PAIR(Config.main_color));
-				mvvline(Global::MainStartY, x_offset-1, 0, Global::MainHeight);
-				attroff(COLOR_PAIR(Config.main_color));
-				refresh();
+				myLockedScreen->resize();
+				myLockedScreen->refresh();
+				drawSeparator(x_offset-1);
 			}
 		}
 	}
 }
 
-bool BasicScreen::Lock()
+bool BaseScreen::lock()
 {
 	if (myLockedScreen)
 		return false;
 	if (isLockable())
 	{
-		 myLockedScreen = this;
-		 return true;
+		myLockedScreen = this;
+		return true;
 	}
 	else
 		return false;
 }
 
-void BasicScreen::Unlock()
+void BaseScreen::unlock()
 {
 	if (myInactiveScreen && myInactiveScreen != myLockedScreen)
 		myScreen = myInactiveScreen;
-	myLockedScreen->SwitchTo();
+	if (myScreen != myLockedScreen)
+		myLockedScreen->switchTo();
 	myLockedScreen = 0;
 	myInactiveScreen = 0;
+}
+
+/***********************************************************************/
+
+void applyToVisibleWindows(std::function<void(BaseScreen *)> f)
+{
+	if (myLockedScreen && myScreen->isMergable())
+	{
+		if (myScreen == myLockedScreen)
+		{
+			if (myInactiveScreen)
+				f(myInactiveScreen);
+		}
+		else
+			f(myLockedScreen);
+	}
+	f(myScreen);
+}
+
+void updateInactiveScreen(BaseScreen *screen_to_be_set)
+{
+	if (myInactiveScreen && myLockedScreen != myInactiveScreen && myLockedScreen == screen_to_be_set)
+	{
+		// if we're here, the following conditions are (or at least should be) met:
+		// 1. screen is split (myInactiveScreen is not null)
+		// 2. current screen (myScreen) is not splittable, ie. is stacked on top of split screens
+		// 3. current screen was activated while master screen was active
+		// 4. we are returning to master screen
+		// in such case we want to keep slave screen visible, so we never set it to null
+		// as in "else" case. we also need to refresh it and redraw separator between
+		// them as stacked screen probably has overwritten part ot it.
+		myInactiveScreen->refresh();
+		drawSeparator(COLS*Config.locked_screen_width_part);
+	}
+	else
+	{
+		if (myLockedScreen == screen_to_be_set)
+			myInactiveScreen = 0;
+		else
+			myInactiveScreen = myLockedScreen;
+	}
+}
+
+bool isVisible(BaseScreen *screen)
+{
+	assert(screen != 0);
+	if (myLockedScreen && myScreen->isMergable())
+		return screen == myScreen || screen == myInactiveScreen || screen == myLockedScreen;
+	else
+		return screen == myScreen;
 }

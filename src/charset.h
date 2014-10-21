@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2008-2012 by Andrzej Rybczak                            *
+ *   Copyright (C) 2008-2014 by Andrzej Rybczak                            *
  *   electricityispower@gmail.com                                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,39 +18,22 @@
  *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
  ***************************************************************************/
 
-#ifndef _CHARSET_H
-#define _CHARSET_H
+#ifndef NCMPCPP_CHARSET_H
+#define NCMPCPP_CHARSET_H
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
-
-#ifdef HAVE_ICONV_H
-
+#include <locale>
 #include <string>
 
-void iconv_convert_from_to(const char *from, const char *to, std::string &s);
+namespace Charset {//
 
-void utf_to_locale(std::string &);
-void locale_to_utf(std::string &);
+std::locale internalLocale();
 
-std::string utf_to_locale_cpy(const std::string &s);
-std::string locale_to_utf_cpy(const std::string &s);
+std::string toUtf8From(std::string s, const char *charset);
+std::string fromUtf8To(std::string s, const char *charset);
 
-void utf_to_locale(const char *&, bool);
-void locale_to_utf(const char *&, bool);
+std::string utf8ToLocale(std::string s);
+std::string localeToUtf8(std::string s);
 
-#else
+}
 
-#define iconv_convert_from_to(x, y, z);
-
-#define utf_to_locale(x);
-#define locale_to_utf(x);
-
-#define utf_to_locale_cpy(x) (x)
-#define locale_to_utf_cpy(x) (x)
-
-#endif // HAVE_ICONV_H
-
-#endif
-
+#endif // NCMPCPP_CHARSET_H
